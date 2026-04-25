@@ -1,0 +1,2 @@
+[console_scripts]
+server = lifeos_agent.server.app:main
