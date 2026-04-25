@@ -4,8 +4,8 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Lifeos Agent environment server components."""
+"""LifeOS Agent environment server components."""
 
-from .lifeos_agent_environment import LifeosAgentEnvironment
+from .lifeos_environment import LifeOSEnvironment
 
-__all__ = ["LifeosAgentEnvironment"]
+__all__ = ["LifeOSEnvironment"]

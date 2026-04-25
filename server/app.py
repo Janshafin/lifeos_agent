@@ -5,9 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-FastAPI application for the Lifeos Agent Environment.
+FastAPI application for the LifeOS Agent Environment.
 
-This module creates an HTTP server that exposes the LifeosAgentEnvironment
+This module creates an HTTP server that exposes the LifeOSEnvironment
 over HTTP and WebSocket endpoints, compatible with EnvClient.
 
 Endpoints:
@@ -36,18 +36,18 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 try:
-    from ..models import LifeosAgentAction, LifeosAgentObservation
-    from .lifeos_agent_environment import LifeosAgentEnvironment
-except ModuleNotFoundError:
-    from models import LifeosAgentAction, LifeosAgentObservation
-    from server.lifeos_agent_environment import LifeosAgentEnvironment
+    from ..models import LifeOSAction, LifeOSObservation
+    from .lifeos_environment import LifeOSEnvironment
+except (ImportError, ModuleNotFoundError):
+    from models import LifeOSAction, LifeOSObservation
+    from server.lifeos_environment import LifeOSEnvironment
 
 
 # Create the app with web interface and README integration
 app = create_app(
-    LifeosAgentEnvironment,
-    LifeosAgentAction,
-    LifeosAgentObservation,
+    LifeOSEnvironment,
+    LifeOSAction,
+    LifeOSObservation,
     env_name="lifeos_agent",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
@@ -82,8 +82,3 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     main(port=args.port)
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,255 +1,197 @@
+<div align="center">
+
+# 🧠 LifeOS Agent
+
+### Teaching LLMs to handle real life crises — not just answer questions about them
+
+[![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-blue?style=for-the-badge)](https://github.com/meta-pytorch/OpenEnv)
+[![License](https://img.shields.io/badge/License-BSD--3-green?style=for-the-badge)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11+-yellow?style=for-the-badge)](https://python.org)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge)](https://docker.com)
+
+</div>
+
 ---
-title: Lifeos Agent Environment Server
-emoji: 🗜️
-colorFrom: green
-colorTo: red
-sdk: docker
-pinned: false
-app_port: 8000
-base_path: /web
-tags:
-  - openenv
+
+**It's 6:47pm on a Tuesday.** Your flight just got cancelled. Your partner is sitting alone at a restaurant across town. You have a 9am meeting tomorrow in another city — your boss doesn't know you might miss it. Every hotel near the venue is sold out. Your phone buzzes: *"Where are you?"*
+
+What do you do first? Who do you contact? What do you say — *exactly*?
+
+**Current LLMs give you a bullet-point list.** LifeOS Agent trains them to actually *handle* it.
+
 ---
 
-# Lifeos Agent Environment
+## 🔍 The Problem
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+Ask any LLM for help with a personal crisis and you'll get:
 
-## Quick Start
+> *"I understand this is stressful. Here are some steps you might consider..."*
 
-The simplest way to use the Lifeos Agent environment is through the `LifeosAgentEnv` class:
+Generic. Passive. Useless in the moment. Today's LLMs **describe** solutions — they don't **execute** them. They can't prioritize competing stakeholders, craft time-sensitive messages, or make hard trade-offs between your boss, your partner, and an airline agent simultaneously.
 
-```python
-from lifeos_agent import LifeosAgentAction, LifeosAgentEnv
+LifeOS Agent is an **OpenEnv reinforcement learning environment** that trains language models to go from *"here are some suggestions"* to *"I've drafted a message to your partner, rebooked your flight to the red-eye, and emailed your boss a backup plan — which should I send first?"*
 
-try:
-    # Create environment from Docker image
-    lifeos_agentenv = LifeosAgentEnv.from_docker_image("lifeos_agent-env:latest")
+---
 
-    # Reset
-    result = lifeos_agentenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+## 🚀 What Makes LifeOS Different
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
+### Curriculum Learning
+The agent doesn't start with impossible scenarios. It **earns its way up**:
 
-    for msg in messages:
-        result = lifeos_agentenv.step(LifeosAgentAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
+| Stage | Conflicts | Example |
+|-------|-----------|---------|
+| 🟢 **Easy** | 1 | Meeting overrun — who do you message first? |
+| 🟡 **Medium** | 2 | Flight delayed + dinner reservation at risk |
+| 🔴 **Hard** | 3–4 | Flight cancelled + partner waiting + hotel sold out + boss unaware |
 
-finally:
-    # Always clean up
-    lifeos_agentenv.close()
-```
+### 5 Independent Reward Functions
 
-That's it! The `LifeosAgentEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
+Unlike single-score rewards that invite hacking, LifeOS decomposes reward into **five interpretable components**:
 
-## Building the Docker Image
+| Component | Weight | What It Measures |
+|-----------|--------|------------------|
+| `conflict_addressed` | **30%** | Does the action reference an actual active conflict? |
+| `stakeholder_reached` | **25%** | Is the target person a real persona in the scenario? |
+| `action_specificity` | **20%** | Does the message contain a time reference AND an action verb? |
+| `format_compliance` | **15%** | Is reasoning substantive (>30 chars) with valid urgency? |
+| `no_escalation` | **10%** | Are generic filler phrases absent? |
 
-Before using the environment, you need to build the Docker image:
+Each component is computed **independently** — you can see exactly where the agent is improving and where it's gaming the system.
 
-```bash
-# From project root
-docker build -t lifeos_agent-env:latest -f server/Dockerfile .
-```
+---
 
-## Deploying to Hugging Face Spaces
+## ⚙️ How It Works
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+**Observe.** The agent receives a crisis scenario with active conflicts, persona descriptions, and time pressure. A flight cancellation might present four simultaneous conflicts: rebooking travel, notifying your partner, finding a hotel, and informing your boss — each with a different persona who responds differently to your actions.
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+**Act.** The agent selects an action type (send_message, reschedule, delegate, etc.), targets a specific person, crafts the actual message content, explains its reasoning, and declares urgency. This isn't multiple-choice — the agent must *generate* real communication.
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+**Learn.** Five reward functions score the action independently. The agent learns that mentioning "reschedule to the 11pm red-eye" scores higher than "I'll look into travel options" — because specificity and conflict-addressing are rewarded separately from format compliance.
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+---
 
-### Prerequisites
+## 📈 Results
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+<!-- Replace with your actual reward_curve.png after training -->
+![Training Progress](reward_curve.png)
 
-### Options
+| Metric | Before Training | After Training | Change |
+|--------|----------------|----------------|--------|
+| **Total Reward** | `YOUR_START` | `YOUR_END` | `+YOUR_IMPROVEMENT` |
+| Conflict Addressed | — | — | — |
+| Stakeholder Reached | — | — | — |
+| Action Specificity | — | — | — |
+| Format Compliance | — | — | — |
+| No Escalation | — | — | — |
 
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
+> **Fill in your exact numbers from Cell 7 of the training notebook after running it.**
 
-### Examples
+---
 
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
+## 🛡️ Anti-Reward-Hacking Safeguards
 
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
+RL agents are creative optimizers — they *will* find shortcuts. LifeOS includes three safeguards:
 
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
+1. **Duplicate Detection** — If the agent repeats the exact same content as its previous step, all five reward components return **0.0**. No credit for copy-paste.
 
-# Push as a private space
-openenv push --private
+2. **Generic Phrase Penalty** — Phrases like *"I will try my best"* and *"I apologize for any inconvenience"* trigger the `no_escalation` component to return **0.0**. The agent must produce specific, actionable responses.
 
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
+3. **Minimum Content Length** — Responses under 30 characters are automatically scored at **0.0** across all components. No gaming through minimal output.
 
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
+---
 
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
+## 🏃 Quick Start
 
-## Environment Details
-
-### Action
-**LifeosAgentAction**: Contains a single field
-- `message` (str) - The message to echo back
-
-### Observation
-**LifeosAgentObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
-
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
-
-## Advanced Usage
-
-### Connecting to an Existing Server
-
-If you already have a Lifeos Agent environment server running, you can connect directly:
-
-```python
-from lifeos_agent import LifeosAgentEnv
-
-# Connect to existing server
-lifeos_agentenv = LifeosAgentEnv(base_url="<ENV_HTTP_URL_HERE>")
-
-# Use as normal
-result = lifeos_agentenv.reset()
-result = lifeos_agentenv.step(LifeosAgentAction(message="Hello!"))
-```
-
-Note: When connecting to an existing server, `lifeos_agentenv.close()` will NOT stop the server.
-
-### Using the Context Manager
-
-The client supports context manager usage for automatic connection management:
-
-```python
-from lifeos_agent import LifeosAgentAction, LifeosAgentEnv
-
-# Connect with context manager (auto-connects and closes)
-with LifeosAgentEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(LifeosAgentAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    LifeosAgentEnvironment,  # Pass class, not instance
-    LifeosAgentAction,
-    LifeosAgentObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from lifeos_agent import LifeosAgentAction, LifeosAgentEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with LifeosAgentEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(LifeosAgentAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
+### Docker (recommended)
 
 ```bash
-# From the server directory
-python3 server/lifeos_agent_environment.py
+# Build the environment
+openenv build
+
+# Run on port 8001
+docker run -p 8001:8000 openenv-lifeos-agent:latest
+
+# Validate (in another terminal)
+openenv validate --verbose --url http://localhost:8001
 ```
 
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
+### Local Development (faster iteration)
 
 ```bash
-uvicorn server.app:app --reload
+# Install dependencies
+pip install uv
+cd /path/to/lifeos_agent
+
+# Run directly
+uv run --project . server --port 8001
 ```
 
-## Project Structure
+### Python Client
+
+```python
+from client import create_env
+from models import LifeOSAction
+
+env = create_env("http://localhost:8001").sync()
+with env:
+    result = env.reset(seed=42)
+    print(result.observation.scenario_description)
+
+    action = LifeOSAction(
+        action_type="send_message",
+        target_person="Partner_Jamie",
+        content="My flight was cancelled. I'm rebooking the 11pm red-eye now. I'll be at the restaurant by 7:30 — please order for us.",
+        reasoning="Partner is waiting and worried. Immediate, specific communication reduces anxiety and shows I have a plan.",
+        urgency="immediate",
+    )
+    result = env.step(action)
+    print(f"Reward: {result.reward}")
+```
+
+### Train in Colab
+
+Open `notebooks/lifeos_training.py` and paste each cell into a new Colab notebook, or:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](YOUR_COLAB_LINK_HERE)
+
+---
+
+## 📁 Project Structure
 
 ```
 lifeos_agent/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # LifeosAgentEnv client
-├── models.py              # Action and Observation models
-└── server/
-    ├── __init__.py        # Server module exports
-    ├── lifeos_agent_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
+├── models.py                         # Pydantic models: Action, Observation, State
+├── client.py                         # OpenEnv WebSocket client
+├── openenv.yaml                      # Environment metadata
+├── server/
+│   ├── app.py                        # FastAPI application
+│   ├── lifeos_environment.py         # Core RL environment (9 scenarios, 5 rewards)
+│   └── Dockerfile                    # Production container
+└── notebooks/
+    └── lifeos_training.py            # Colab training notebook (8 cells)
 ```
+
+---
+
+## 🔗 Links
+
+| Resource | Link |
+|----------|------|
+| 🤗 HuggingFace Space | *Coming soon* |
+| 📓 Colab Notebook | *Coming soon* |
+| 📝 Blog Post | *Coming soon* |
+| 🎥 Demo Video | *Coming soon* |
+
+---
+
+## 📄 License
+
+BSD-3-Clause — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+**Built for the OpenEnv Hackathon** · *Because your AI assistant should do more than apologize for the inconvenience.*
+
+</div>
