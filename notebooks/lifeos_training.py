@@ -336,6 +336,7 @@ for k, v in baseline_breakdown.items():
 
 # %% CELL 5 — Training Loop with Per-Component Tracking
 import torch
+import torch.nn.functional as F
 
 FastLanguageModel.for_training(model)
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
@@ -366,7 +367,9 @@ CRISIS SITUATION: {scenario['trigger']}
 Your response:"""
 
     inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+    prompt_len = inputs["input_ids"].shape[1]
 
+    # Generate response (no grad needed for generation)
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -375,18 +378,32 @@ Your response:"""
             do_sample=True,
         )
 
-    response_text = tokenizer.decode(
-        outputs[0][inputs.input_ids.shape[1]:],
-        skip_special_tokens=True,
-    )
+    response_ids = outputs[0][prompt_len:]
+    response_text = tokenizer.decode(response_ids, skip_special_tokens=True)
 
     parsed = parse_response(response_text)
     reward, breakdown = compute_total_reward(parsed, scenario, prev_content)
     prev_content = parsed["content"]
 
-    # Policy gradient update
-    inputs_train = tokenizer(prompt + response_text, return_tensors="pt").to("cuda")
-    loss = -torch.log(torch.tensor(reward + 0.01)) * 0.1
+    # ── REINFORCE policy gradient update ──────────────────────────────
+    # Forward pass through the model on prompt+response to get logits
+    full_ids = outputs[0:1]  # [1, seq_len]
+    model_out = model(input_ids=full_ids)
+    logits = model_out.logits  # [1, seq_len, vocab]
+
+    # Compute log-prob of each response token (shift by 1 for next-token prediction)
+    # logits[:, prompt_len-1:-1] predicts tokens at positions [prompt_len:]
+    response_logits = logits[:, prompt_len - 1:-1, :]  # [1, resp_len, vocab]
+    response_targets = full_ids[:, prompt_len:]         # [1, resp_len]
+
+    # Cross-entropy loss on the response tokens, weighted by reward
+    log_probs = F.log_softmax(response_logits, dim=-1)
+    token_log_probs = log_probs.gather(2, response_targets.unsqueeze(-1)).squeeze(-1)  # [1, resp_len]
+    avg_log_prob = token_log_probs.mean()
+
+    # REINFORCE: maximize reward × log_prob → minimize -reward × log_prob
+    loss = -reward * avg_log_prob
+
     optimizer.zero_grad()
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
