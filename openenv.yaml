@@ -1,7 +1,44 @@
 spec_version: 1
-name: lifeos_agent
+name: lifeos-agent
+version: 0.2.0
+description: >
+  An OpenEnv-compliant RL training environment that trains LLMs to handle
+  cascading personal life crises involving multiple stakeholders, time pressure,
+  and competing priorities. Unlike existing environments that test generic
+  reasoning, LifeOS Agent targets the specific capability gap of multi-stakeholder
+  personal conflict resolution — training models to go from describing solutions
+  to executing them with real communication actions.
+author: LifeOS Team
+theme: personalized-tasks
+tags:
+  - personal-assistant
+  - crisis-management
+  - multi-stakeholder
+  - curriculum-learning
+  - reward-decomposition
+  - conflict-resolution
 type: space
 runtime: fastapi
+entry_point: server/app.py
 app: server.app:app
 port: 8000
-
+environment_class: LifeOSEnvironment
+action_class: LifeOSAction
+observation_class: LifeOSObservation
+state_class: LifeOSState
+reward_components:
+  - name: conflict_addressed
+    weight: 0.30
+    description: Does the action content reference an active conflict keyword?
+  - name: stakeholder_reached
+    weight: 0.25
+    description: Is the target person one of the scenario's personas?
+  - name: action_specificity
+    weight: 0.20
+    description: Does the content contain both a time reference and an action verb?
+  - name: format_compliance
+    weight: 0.15
+    description: Is reasoning substantive (>40 chars) with a valid urgency level?
+  - name: no_escalation
+    weight: 0.10
+    description: Are generic filler phrases absent from the response?

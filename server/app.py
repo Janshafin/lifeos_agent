@@ -49,7 +49,7 @@ app = create_app(
     LifeOSAction,
     LifeOSObservation,
     env_name="lifeos_agent",
-    max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
+    max_concurrent_envs=1,
 )
 
 
@@ -80,5 +80,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", type=str, default="0.0.0.0")
     args = parser.parse_args()
-    main(port=args.port)
+    main(host=args.host, port=args.port)

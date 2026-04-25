@@ -48,19 +48,19 @@ class LifeOSEnvClient(EnvClient[LifeOSAction, LifeOSObservation, LifeOSState]):
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward", 0.0),
-            done=payload.get("done", False),
+            reward=float(payload.get("reward", 0.0)),
+            done=bool(payload.get("done", False)),
         )
 
     def _parse_state(self, payload: Dict[str, Any]) -> LifeOSState:
         """Parse the server's state response into a :class:`LifeOSState`."""
-        return LifeOSState(**payload)
+        return LifeOSState(**payload.get("state", payload))
 
 
 # ── convenience factory ─────────────────────────────────────────────────────
 
 
-def create_env(base_url: str = "http://localhost:8000") -> LifeOSEnvClient:
+def create_env(base_url: str = "http://localhost:8001") -> LifeOSEnvClient:
     """Create a :class:`LifeOSEnvClient` pointed at *base_url*.
 
     The caller is responsible for connecting (either ``await client.connect()``

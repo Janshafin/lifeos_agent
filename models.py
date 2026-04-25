@@ -1,4 +1,10 @@
-"""LifeOS Agent – Pydantic models for the OpenEnv RL environment."""
+"""LifeOS Agent – Pydantic models for the OpenEnv RL environment.
+
+Defines the three core data structures:
+  • LifeOSAction      – what the agent can do
+  • LifeOSObservation  – what the agent sees after each step
+  • LifeOSState        – internal mutable environment state
+"""
 
 from __future__ import annotations
 
@@ -51,7 +57,7 @@ class LifeOSState(BaseModel):
     """Mutable state tracked by the environment across steps."""
 
     scenario_id: str
-    difficulty: Literal["easy", "medium", "hard"]
+    difficulty: str
     step_count: int = 0
     max_steps: int = 10
     conflicts_total: int = 3

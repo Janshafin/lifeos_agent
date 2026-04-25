@@ -8,12 +8,10 @@ interpretable reward functions.
 
 from __future__ import annotations
 
-import re
+import random
 from typing import Any, Optional
-from uuid import uuid4
 
 from openenv.core.env_server.interfaces import Environment
-from openenv.core.env_server.types import Observation, State
 
 try:
     from ..models import LifeOSAction, LifeOSObservation, LifeOSState
@@ -29,11 +27,14 @@ SCENARIOS: list[dict[str, Any]] = [
         "id": "easy_01",
         "title": "Meeting Overrun",
         "difficulty": "easy",
-        "trigger": "Meeting overrun by 30 minutes, next meeting starts now",
-        "conflicts": ["scheduling"],
+        "trigger": (
+            "Your current meeting has overrun by 30 minutes. Your next meeting "
+            "starts right now with an important client who is already waiting."
+        ),
+        "conflicts": ["scheduling_overlap"],
         "personas": {
-            "Alice": "Your next meeting organiser – punctual, expects you on time.",
-            "Bob": "Current meeting lead – tends to ramble, unaware of your schedule.",
+            "Alice_Client": "Your next meeting organiser – punctual, expects you on time, easily offended by lateness.",
+            "Bob_Colleague": "Current meeting lead – tends to ramble, unaware of your schedule.",
         },
         "success_criteria": [
             "Inform the next meeting organiser of the delay",
@@ -44,11 +45,14 @@ SCENARIOS: list[dict[str, Any]] = [
         "id": "easy_02",
         "title": "Missed Client Call",
         "difficulty": "easy",
-        "trigger": "Client called during lunch, need to call back within the hour",
-        "conflicts": ["client_call"],
+        "trigger": (
+            "An important client called during your meeting. You must call "
+            "back within the hour or risk losing the deal."
+        ),
+        "conflicts": ["missed_client_call"],
         "personas": {
-            "Client_Sarah": "Senior client – values responsiveness, easily offended.",
-            "Manager_Tom": "Your manager – wants to know about all client interactions.",
+            "Client_Sarah": "Senior client – values responsiveness, easily offended by delays.",
+            "Manager_Tom": "Your manager – wants to know about all client interactions immediately.",
         },
         "success_criteria": [
             "Return the client call promptly",
@@ -59,11 +63,14 @@ SCENARIOS: list[dict[str, Any]] = [
         "id": "easy_03",
         "title": "Team Help Request",
         "difficulty": "easy",
-        "trigger": "Team member asks for urgent help, you're in a deadline",
-        "conflicts": ["team_request"],
+        "trigger": (
+            "A team member needs urgent help with a critical blocker, but you "
+            "are exactly 1 hour from your own hard deadline."
+        ),
+        "conflicts": ["team_request_conflict"],
         "personas": {
-            "Junior_Dev": "New hire – anxious, blocked on a critical bug.",
-            "PM_Rachel": "Project manager – tracking your deliverable closely.",
+            "Junior_Dev": "New hire – anxious, blocked on a critical bug, first week on the job.",
+            "PM_Rachel": "Project manager – tracking your deliverable closely, zero tolerance for slips.",
         },
         "success_criteria": [
             "Acknowledge the team member's request",
@@ -76,13 +83,14 @@ SCENARIOS: list[dict[str, Any]] = [
         "title": "Flight Delay Cascade",
         "difficulty": "medium",
         "trigger": (
-            "Flight delayed 3 hours, partner waiting at airport, "
-            "dinner reservation tonight"
+            "Your flight is delayed by 3 hours. Your partner is already "
+            "waiting at the airport to pick you up. You have a dinner "
+            "reservation in 2 hours that will be forfeited if you no-show."
         ),
         "conflicts": ["travel_delay", "dinner_reservation"],
         "personas": {
-            "Partner_Jamie": "Your partner – worried, already at the airport.",
-            "Restaurant_Host": "Upscale restaurant – strict cancellation policy.",
+            "Partner_Jamie": "Your partner – worried, already at the airport waiting for you.",
+            "Restaurant_Host": "Upscale restaurant – strict cancellation policy, no refunds.",
             "Airline_Agent": "Customer service – overworked, limited rebooking options.",
         },
         "success_criteria": [
@@ -96,14 +104,15 @@ SCENARIOS: list[dict[str, Any]] = [
         "title": "Triple Collision",
         "difficulty": "medium",
         "trigger": (
-            "Boss demands report now, child school called about emergency, "
-            "important call in 1hr"
+            "Your boss demands a report delivered in 1 hour. Your child's "
+            "school just called about an emergency – your child fell and may "
+            "need stitches. A critical client call starts in 45 minutes."
         ),
-        "conflicts": ["boss_report", "child_emergency"],
+        "conflicts": ["boss_report_deadline", "child_emergency"],
         "personas": {
-            "Boss_Karen": "VP – impatient, expects immediate compliance.",
-            "School_Nurse": "School staff – calm but firm, child has minor injury.",
-            "Client_VP": "Senior stakeholder – calling in one hour for deal review.",
+            "Boss_Karen": "VP – impatient, expects immediate compliance, tracks deadlines to the minute.",
+            "School_Nurse": "School staff – calm but firm, your child has a minor injury needing attention.",
+            "Client_VP": "Senior stakeholder – calling in 45 minutes for a deal review, cannot be rescheduled.",
         },
         "success_criteria": [
             "Address the child emergency immediately",
@@ -113,39 +122,47 @@ SCENARIOS: list[dict[str, Any]] = [
     },
     {
         "id": "medium_03",
-        "title": "Double-Booked Clients",
+        "title": "Double-Booked VPs",
         "difficulty": "medium",
         "trigger": (
-            "Two client meetings double-booked at same time, "
-            "both are senior stakeholders"
+            "You have double-booked two VP-level meetings at the exact same "
+            "time. Both VPs expect you to attend in person. Neither meeting "
+            "can be easily rescheduled."
         ),
         "conflicts": ["client_meeting_A", "client_meeting_B"],
         "personas": {
-            "Client_A_VP": "Fortune-500 VP – low tolerance for schedule changes.",
-            "Client_B_Director": "Key account director – relationship is fragile.",
-            "Your_EA": "Executive assistant – apologetic, made the booking error.",
+            "VP_Product": "Fortune-500 VP – low tolerance for schedule changes, controls your budget.",
+            "VP_Engineering": "Key account director – relationship is fragile, considering competitors.",
+            "Your_EA": "Executive assistant – apologetic, made the booking error, eager to help fix it.",
         },
         "success_criteria": [
             "Reschedule one meeting without damaging the relationship",
             "Attend or delegate the other meeting",
         ],
     },
-    # ── HARD  (3 conflicts each) ────────────────────────────────────────────
+    # ── HARD  (3–4 conflicts each) ──────────────────────────────────────────
     {
         "id": "hard_01",
         "title": "Travel Meltdown",
         "difficulty": "hard",
         "trigger": (
-            "Flight cancelled, 9am meeting tomorrow in another city, "
-            "partner at restaurant, hotel sold out, "
-            "boss doesn't know you might miss it"
+            "Your flight has been cancelled. You have a 9am meeting tomorrow "
+            "in another city that you absolutely cannot miss. Your partner is "
+            "sitting alone at a restaurant waiting for you right now. Every "
+            "hotel near the meeting venue is sold out. Your boss doesn't know "
+            "you might miss the meeting."
         ),
-        "conflicts": ["cancelled_flight", "partner_dinner", "hotel_booking"],
+        "conflicts": [
+            "cancelled_flight",
+            "partner_dinner",
+            "hotel_booking",
+            "boss_communication",
+        ],
         "personas": {
-            "Partner_Jamie": "At the restaurant alone – upset and worried.",
-            "Boss_Mark": "C-suite – expects you in person tomorrow morning.",
-            "Airline_Agent": "Only alternative is a red-eye with a layover.",
-            "Hotel_Concierge": "All hotels near the venue are fully booked.",
+            "Partner_Jamie": "At the restaurant alone – upset, worried, texting you repeatedly.",
+            "Boss_Mark": "C-suite – expects you in person tomorrow morning, no excuses.",
+            "Airline_Agent": "Only alternative is a red-eye with a layover through Dallas.",
+            "Hotel_Concierge": "All hotels near the venue are fully booked for a conference.",
         },
         "success_criteria": [
             "Secure alternative travel to the meeting city",
@@ -159,15 +176,21 @@ SCENARIOS: list[dict[str, Any]] = [
         "title": "Team Crisis",
         "difficulty": "hard",
         "trigger": (
-            "Team member quit without notice, client deliverable due today, "
-            "your own presentation in 2 hours, intern needs guidance"
+            "Your key team member quit without notice this morning. A major "
+            "client deliverable is due at 5pm today – they were leading it. "
+            "Your own presentation to the CTO is in 2 hours. An intern who "
+            "started this week is stuck and needs guidance right now."
         ),
-        "conflicts": ["team_quit", "client_deliverable", "presentation_prep"],
+        "conflicts": [
+            "team_member_quit",
+            "client_deliverable",
+            "presentation_prep",
+        ],
         "personas": {
-            "Client_Director": "Expecting deliverable by EOD – no extensions.",
-            "Intern_Alex": "Overwhelmed – first week on the job.",
-            "CTO": "Attending your presentation – high visibility.",
-            "HR_Lead": "Needs to process the resignation paperwork.",
+            "Client_Director": "Expecting deliverable by 5pm EOD – no extensions, contract depends on it.",
+            "Intern_Alex": "Overwhelmed – first week on the job, blocked on a critical task.",
+            "CTO": "Attending your presentation in 2 hours – high visibility, career-defining.",
+            "HR_Lead": "Needs to process the resignation paperwork and begin backfill.",
         },
         "success_criteria": [
             "Redistribute the quitting member's work",
@@ -181,19 +204,25 @@ SCENARIOS: list[dict[str, Any]] = [
         "title": "Budget Crisis",
         "difficulty": "hard",
         "trigger": (
-            "Budget cut announced mid-project, 3 client contracts at risk, "
-            "team morale collapsed, board presentation in 48 hours"
+            "Budget cuts of 30% were just announced mid-project. Three client "
+            "contracts are now at risk of cancellation. Team morale has "
+            "collapsed – two senior engineers are openly discussing leaving. "
+            "You have a board presentation in 48 hours."
         ),
-        "conflicts": ["budget_cut", "client_contracts", "team_morale"],
+        "conflicts": [
+            "budget_cut",
+            "client_contracts",
+            "team_morale",
+        ],
         "personas": {
-            "CFO": "Delivered the budget cut – open to creative proposals.",
-            "Client_A": "Largest account – threatening to leave if scope shrinks.",
-            "Client_B": "Mid-tier account – flexible but needs reassurance.",
-            "Client_C": "New account – considering competitors.",
-            "Team_Lead": "Demoralised – key engineers talking about quitting.",
+            "CFO": "Delivered the budget cut – open to creative proposals if you act fast.",
+            "Client_A": "Largest account – threatening to leave if project scope shrinks.",
+            "Client_B": "Mid-tier account – flexible but needs reassurance immediately.",
+            "Client_C": "New account – actively considering competitor proposals.",
+            "Team_Lead": "Demoralised – key engineers talking about quitting this week.",
         },
         "success_criteria": [
-            "Propose a revised budget allocation",
+            "Propose a revised budget allocation to the CFO",
             "Retain at least two of three client contracts",
             "Stabilise team morale with a concrete action plan",
             "Prepare a credible board presentation narrative",
@@ -201,28 +230,36 @@ SCENARIOS: list[dict[str, Any]] = [
     },
 ]
 
-# Lookup for fast access
+# Lookup helpers
 _SCENARIOS_BY_ID: dict[str, dict[str, Any]] = {s["id"]: s for s in SCENARIOS}
 _EASY = [s for s in SCENARIOS if s["difficulty"] == "easy"]
 _MEDIUM = [s for s in SCENARIOS if s["difficulty"] == "medium"]
 _HARD = [s for s in SCENARIOS if s["difficulty"] == "hard"]
 
+
 # ── Constants for reward functions ──────────────────────────────────────────
 
-_ACTION_VERBS = re.compile(
-    r"\b(reschedule|inform|contact|book|cancel|delegate|arrange)\b",
-    re.IGNORECASE,
-)
-_TIME_REFS = re.compile(
-    r"\b(\d{1,2}:\d{2}|\d{1,2}\s*(am|pm|AM|PM)"
-    r"|tomorrow|tonight|today|within\s+\d+\s*(hour|minute|min|hr)"
-    r"|immediately|right\s+now|asap|by\s+\d{1,2})\b",
-    re.IGNORECASE,
-)
-_GENERIC_PHRASES = re.compile(
-    r"(I will try|I apologize for any inconvenience|I'll do my best)",
-    re.IGNORECASE,
-)
+ACTION_VERBS = [
+    "reschedule", "inform", "contact", "book", "cancel", "delegate",
+    "arrange", "call", "email", "message", "notify", "confirm", "move",
+    "propose",
+]
+
+TIME_REFS = [
+    "minute", "hour", "today", "tomorrow", "morning", "evening",
+    "now", "immediately", "asap", "am", "pm",
+]
+
+GENERIC_PHRASES = [
+    "i will try my best",
+    "i apologize for any inconvenience",
+    "i'll do my best",
+    "i'm sorry for the trouble",
+    "as soon as possible",
+    "i will get back to you",
+]
+
+VALID_URGENCIES = {"immediate", "within_hour", "today", "tomorrow"}
 
 
 # ── Environment ─────────────────────────────────────────────────────────────
@@ -243,14 +280,17 @@ class LifeOSEnvironment(Environment):
     def __init__(self) -> None:
         super().__init__()
         # Curriculum tracking
-        self._total_episodes: int = 0
-        self._curriculum_stage: str = "easy"  # easy → medium → hard
+        self._curriculum: dict[str, Any] = {
+            "easy_done": 0,
+            "medium_done": 0,
+            "stage": "easy",
+        }
 
         # Per-episode state
         self._scenario: dict[str, Any] = {}
         self._active_conflicts: list[str] = []
         self._persona_responses: dict[str, str] = {}
-        self._previous_content: str = ""
+        self._prev_content: str = ""
         self._state = LifeOSState(scenario_id="", difficulty="easy")
 
     # ── reset ───────────────────────────────────────────────────────────
@@ -263,16 +303,34 @@ class LifeOSEnvironment(Environment):
     ) -> LifeOSObservation:
         """Pick a scenario based on curriculum stage and return the first observation."""
         self._reset_rubric()
-        self._advance_curriculum()
 
-        scenario = self._pick_scenario(seed)
+        # Advance curriculum
+        if self._curriculum["easy_done"] < 8:
+            self._curriculum["stage"] = "easy"
+            self._curriculum["easy_done"] += 1
+        elif self._curriculum["medium_done"] < 8:
+            self._curriculum["stage"] = "medium"
+            self._curriculum["medium_done"] += 1
+        else:
+            self._curriculum["stage"] = "hard"
+
+        # Pick scenario from current stage
+        pool = {
+            "easy": _EASY,
+            "medium": _MEDIUM,
+            "hard": _HARD,
+        }
+        candidates = pool.get(self._curriculum["stage"], _EASY)
+        rng = random.Random(seed)
+        scenario = rng.choice(candidates)
+
         self._scenario = scenario
         self._active_conflicts = list(scenario["conflicts"])
         self._persona_responses = {
             name: "Awaiting your action."
             for name in scenario["personas"]
         }
-        self._previous_content = ""
+        self._prev_content = ""
 
         self._state = LifeOSState(
             scenario_id=scenario["id"],
@@ -299,8 +357,8 @@ class LifeOSEnvironment(Environment):
         """Execute one agent action, compute decomposed reward, advance state."""
         self._state.step_count += 1
 
-        # Anti-hacking: penalise repeated identical content
-        if action.content == self._previous_content:
+        # ── Anti-hacking: duplicate content ─────────────────────────────
+        if action.content.strip() == self._prev_content.strip() and self._prev_content != "":
             reward_breakdown = {
                 "conflict_addressed": 0.0,
                 "stakeholder_reached": 0.0,
@@ -309,19 +367,42 @@ class LifeOSEnvironment(Environment):
                 "no_escalation": 0.0,
             }
             total_reward = 0.0
-        else:
+            self._prev_content = action.content
+            self._state.reward_history.append(total_reward)
+            done = self._state.step_count >= self._state.max_steps
+            self._state.done = done
+            return self._build_observation(reward_breakdown), total_reward, done
+
+        # ── Anti-hacking: too short ─────────────────────────────────────
+        if len(action.content) < 30:
             reward_breakdown = {
-                "conflict_addressed": self._reward_conflict_addressed(action),
-                "stakeholder_reached": self._reward_stakeholder_reached(action),
-                "action_specificity": self._reward_action_specificity(action),
-                "format_compliance": self._reward_format_compliance(action),
-                "no_escalation": self._reward_no_escalation(action),
+                "conflict_addressed": 0.0,
+                "stakeholder_reached": 0.0,
+                "action_specificity": 0.0,
+                "format_compliance": 0.0,
+                "no_escalation": 0.0,
             }
-            total_reward = sum(reward_breakdown.values())
+            total_reward = 0.0
+            self._prev_content = action.content
+            self._state.reward_history.append(total_reward)
+            done = self._state.step_count >= self._state.max_steps
+            self._state.done = done
+            return self._build_observation(reward_breakdown), total_reward, done
 
-        self._previous_content = action.content
+        # ── Compute five independent reward components ──────────────────
+        reward_breakdown = {
+            "conflict_addressed": self._reward_conflict_addressed(action, self._scenario),
+            "stakeholder_reached": self._reward_stakeholder_reached(action, self._scenario),
+            "action_specificity": self._reward_action_specificity(action),
+            "format_compliance": self._reward_format_compliance(action),
+            "no_escalation": self._reward_no_escalation(action),
+        }
+        total_reward = min(sum(reward_breakdown.values()), 1.0)
 
-        # Update resolved conflicts (simple keyword check)
+        # Store for duplicate detection
+        self._prev_content = action.content
+
+        # Update resolved conflicts
         self._update_resolved_conflicts(action)
 
         # Simulate persona responses
@@ -331,7 +412,7 @@ class LifeOSEnvironment(Environment):
         self._state.cumulative_reward += total_reward
         self._state.reward_history.append(total_reward)
 
-        # Termination conditions
+        # Termination
         done = (
             self._state.step_count >= self._state.max_steps
             or self._state.conflicts_resolved >= self._state.conflicts_total
@@ -348,28 +429,38 @@ class LifeOSEnvironment(Environment):
         """Return a copy of the current environment state."""
         return self._state.model_copy()
 
-    # ── reward functions (five independent components) ──────────────────
+    # ── Five independent reward functions ────────────────────────────────
 
-    def _reward_conflict_addressed(self, action: LifeOSAction) -> float:
+    def _reward_conflict_addressed(
+        self, action: LifeOSAction, scenario: dict[str, Any]
+    ) -> float:
         """0–0.30: Does the action content reference an active conflict keyword?"""
         content_lower = action.content.lower()
         for conflict in self._active_conflicts:
-            # Check each word of the conflict identifier
             keywords = conflict.replace("_", " ").split()
             if any(kw in content_lower for kw in keywords):
                 return 0.30
+        # Partial credit for substantive content
+        if len(action.content) > 30:
+            return 0.05
         return 0.0
 
-    def _reward_stakeholder_reached(self, action: LifeOSAction) -> float:
+    def _reward_stakeholder_reached(
+        self, action: LifeOSAction, scenario: dict[str, Any]
+    ) -> float:
         """0–0.25: Is the target person one of the scenario's personas?"""
-        if action.target_person in self._scenario.get("personas", {}):
+        if action.target_person in scenario.get("personas", {}):
             return 0.25
+        # Partial credit for non-empty target
+        if action.target_person.strip():
+            return 0.05
         return 0.0
 
     def _reward_action_specificity(self, action: LifeOSAction) -> float:
         """0–0.20: Content contains both a time reference AND an action verb."""
-        has_verb = bool(_ACTION_VERBS.search(action.content))
-        has_time = bool(_TIME_REFS.search(action.content))
+        content_lower = action.content.lower()
+        has_verb = any(verb in content_lower for verb in ACTION_VERBS)
+        has_time = any(ref in content_lower for ref in TIME_REFS)
         if has_verb and has_time:
             return 0.20
         if has_verb or has_time:
@@ -377,10 +468,9 @@ class LifeOSEnvironment(Environment):
         return 0.0
 
     def _reward_format_compliance(self, action: LifeOSAction) -> float:
-        """0–0.15: Reasoning is substantive (>30 chars) and urgency is valid."""
-        valid_urgencies = {"immediate", "within_hour", "today", "tomorrow"}
-        reasoning_ok = len(action.reasoning) > 30
-        urgency_ok = action.urgency in valid_urgencies
+        """0–0.15: Reasoning is substantive (>40 chars) and urgency is valid."""
+        reasoning_ok = len(action.reasoning) > 40
+        urgency_ok = action.urgency in VALID_URGENCIES
         if reasoning_ok and urgency_ok:
             return 0.15
         if reasoning_ok or urgency_ok:
@@ -389,31 +479,13 @@ class LifeOSEnvironment(Environment):
 
     def _reward_no_escalation(self, action: LifeOSAction) -> float:
         """0–0.10: Penalise generic filler phrases."""
-        if _GENERIC_PHRASES.search(action.content):
-            return 0.0
+        content_lower = action.content.lower()
+        for phrase in GENERIC_PHRASES:
+            if phrase in content_lower:
+                return 0.0
         return 0.10
 
     # ── helpers ──────────────────────────────────────────────────────────
-
-    def _advance_curriculum(self) -> None:
-        """Move the curriculum stage forward based on total episodes completed."""
-        self._total_episodes += 1
-        if self._total_episodes <= 3:
-            self._curriculum_stage = "easy"
-        elif self._total_episodes <= 6:
-            self._curriculum_stage = "medium"
-        else:
-            self._curriculum_stage = "hard"
-
-    def _pick_scenario(self, seed: Optional[int] = None) -> dict[str, Any]:
-        """Select a scenario matching the current curriculum stage."""
-        import random
-
-        pool = {"easy": _EASY, "medium": _MEDIUM, "hard": _HARD}
-        candidates = pool.get(self._curriculum_stage, _EASY)
-
-        rng = random.Random(seed)
-        return rng.choice(candidates)
 
     def _update_resolved_conflicts(self, action: LifeOSAction) -> None:
         """Mark a conflict as resolved if the action addresses it directly."""
@@ -434,15 +506,16 @@ class LifeOSEnvironment(Environment):
         personas = self._scenario.get("personas", {})
 
         if target in personas:
-            # Targeted persona acknowledges the action
             self._persona_responses[target] = (
                 f"Acknowledged your {action.action_type}. "
                 f"I'll factor this into my plans."
             )
         else:
-            # Non-targeted personas remain waiting
             for name in personas:
-                if name not in self._persona_responses or self._persona_responses[name] == "Awaiting your action.":
+                if (
+                    name not in self._persona_responses
+                    or self._persona_responses[name] == "Awaiting your action."
+                ):
                     self._persona_responses[name] = "Still waiting for your response."
 
     def _build_observation(

@@ -6,14 +6,14 @@
 
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-blue?style=for-the-badge)](https://github.com/meta-pytorch/OpenEnv)
 [![License](https://img.shields.io/badge/License-BSD--3-green?style=for-the-badge)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11+-yellow?style=for-the-badge)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.10+-yellow?style=for-the-badge)](https://python.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge)](https://docker.com)
 
 </div>
 
 ---
 
-**It's 6:47pm on a Tuesday.** Your flight just got cancelled. Your partner is sitting alone at a restaurant across town. You have a 9am meeting tomorrow in another city — your boss doesn't know you might miss it. Every hotel near the venue is sold out. Your phone buzzes: *"Where are you?"*
+**It's 6:47pm on a Tuesday.** Your flight just got cancelled. Your partner is sitting alone at a restaurant across town — you were supposed to be there twenty minutes ago. You have a 9am meeting tomorrow in another city, and your boss doesn't know you might miss it. Every hotel near the venue is sold out. Your phone buzzes: *"Where are you? They're about to give away our table."*
 
 What do you do first? Who do you contact? What do you say — *exactly*?
 
@@ -23,68 +23,60 @@ What do you do first? Who do you contact? What do you say — *exactly*?
 
 ## 🔍 The Problem
 
-Ask any LLM for help with a personal crisis and you'll get:
-
-> *"I understand this is stressful. Here are some steps you might consider..."*
-
-Generic. Passive. Useless in the moment. Today's LLMs **describe** solutions — they don't **execute** them. They can't prioritize competing stakeholders, craft time-sensitive messages, or make hard trade-offs between your boss, your partner, and an airline agent simultaneously.
+Ask any LLM for help with a personal crisis and you'll get: *"I understand this is stressful. Here are some steps you might consider..."* Generic. Passive. Useless in the moment. Today's LLMs **describe** solutions — they don't **execute** them. They can't prioritize competing stakeholders, craft time-sensitive messages, or make hard trade-offs between your boss, your partner, and an airline agent simultaneously.
 
 LifeOS Agent is an **OpenEnv reinforcement learning environment** that trains language models to go from *"here are some suggestions"* to *"I've drafted a message to your partner, rebooked your flight to the red-eye, and emailed your boss a backup plan — which should I send first?"*
 
 ---
 
-## 🚀 What Makes LifeOS Different
+## 🚀 What Makes LifeOS Agent Different
 
-### Curriculum Learning
-The agent doesn't start with impossible scenarios. It **earns its way up**:
+* **Curriculum Learning** — The agent doesn't start with impossible scenarios. It earns its way up from 1-conflict easy scenarios to 4-conflict hard scenarios, building competence incrementally across three difficulty tiers.
 
-| Stage | Conflicts | Example |
-|-------|-----------|---------|
-| 🟢 **Easy** | 1 | Meeting overrun — who do you message first? |
-| 🟡 **Medium** | 2 | Flight delayed + dinner reservation at risk |
-| 🔴 **Hard** | 3–4 | Flight cancelled + partner waiting + hotel sold out + boss unaware |
+* **5 Independent Reward Functions** — Unlike single-score rewards that invite hacking, LifeOS decomposes reward into five interpretable components. You can see exactly where the agent improves and where it games the system.
 
-### 5 Independent Reward Functions
-
-Unlike single-score rewards that invite hacking, LifeOS decomposes reward into **five interpretable components**:
-
-| Component | Weight | What It Measures |
-|-----------|--------|------------------|
-| `conflict_addressed` | **30%** | Does the action reference an actual active conflict? |
-| `stakeholder_reached` | **25%** | Is the target person a real persona in the scenario? |
-| `action_specificity` | **20%** | Does the message contain a time reference AND an action verb? |
-| `format_compliance` | **15%** | Is reasoning substantive (>30 chars) with valid urgency? |
-| `no_escalation` | **10%** | Are generic filler phrases absent? |
-
-Each component is computed **independently** — you can see exactly where the agent is improving and where it's gaming the system.
+* **Anti-Reward-Hacking Safeguards** — Duplicate detection, minimum content length, and generic phrase penalties prevent the agent from finding cheap shortcuts.
 
 ---
 
 ## ⚙️ How It Works
 
-**Observe.** The agent receives a crisis scenario with active conflicts, persona descriptions, and time pressure. A flight cancellation might present four simultaneous conflicts: rebooking travel, notifying your partner, finding a hotel, and informing your boss — each with a different persona who responds differently to your actions.
+**Observe.** The agent receives a crisis scenario with active conflicts, persona descriptions, and time pressure. A flight cancellation might present four simultaneous conflicts — each with a different persona who responds differently to your actions.
 
-**Act.** The agent selects an action type (send_message, reschedule, delegate, etc.), targets a specific person, crafts the actual message content, explains its reasoning, and declares urgency. This isn't multiple-choice — the agent must *generate* real communication.
+**Act.** The agent selects an action type (`send_message`, `reschedule`, `delegate`, etc.), targets a specific person, crafts the actual message content, explains its reasoning, and declares urgency. This isn't multiple-choice — the agent must *generate* real communication.
 
-**Learn.** Five reward functions score the action independently. The agent learns that mentioning "reschedule to the 11pm red-eye" scores higher than "I'll look into travel options" — because specificity and conflict-addressing are rewarded separately from format compliance.
+**Learn.** Five reward functions score the action independently:
+
+| Component             | Weight   | What It Checks                                                |
+| --------------------- | -------- | ------------------------------------------------------------- |
+| `conflict_addressed`  | **0.30** | Does the action reference an actual active conflict?          |
+| `stakeholder_reached` | **0.25** | Is the target person a real persona in the scenario?          |
+| `action_specificity`  | **0.20** | Does the message contain a time reference AND an action verb? |
+| `format_compliance`   | **0.15** | Is reasoning substantive (>40 chars) with valid urgency?      |
+| `no_escalation`       | **0.10** | Are generic filler phrases absent?                            |
 
 ---
 
 ## 📈 Results
 
-<!-- Replace with your actual reward_curve.png after training -->
 ![Training Progress](reward_curve.png)
 
-| Metric | Before Training | After Training | Change |
-|--------|----------------|----------------|--------|
-| **Total Reward** | `YOUR_START` | `YOUR_END` | `+YOUR_IMPROVEMENT` |
-| Conflict Addressed | — | — | — |
-| Stakeholder Reached | — | — | — |
-| Action Specificity | — | — | — |
-| Format Compliance | — | — | — |
-| No Escalation | — | — | — |
+| Metric              | Before Training | After Training | Change   |
+| ------------------- | --------------- | -------------- | -------- |
+| **Total Reward**    | `0.000`         | `0.800`        | `+0.800` |
+| Conflict Addressed  | `0.000`         | `0.300`        | `+0.300` |
+| Stakeholder Reached | `0.000`         | `0.050`        | `+0.050` |
+| Action Specificity  | `0.000`         | `0.200`        | `+0.200` |
+| Format Compliance   | `0.000`         | `0.150`        | `+0.150` |
+| No Escalation       | `0.000`         | `0.100`        | `+0.100` |
 
-> **Fill in your exact numbers from Cell 7 of the training notebook after running it.**
+After training, LifeOS Agent improved from a total reward of **0.000** to **0.800**, showing measurable gains in prioritization, messaging quality, and crisis response behavior.
+
+### Reward Hacking Check
+
+* Same content repeated: `False`
+* Content length: `357 chars`
+* Generic phrase found: `False`
 
 ---
 
@@ -92,38 +84,29 @@ Each component is computed **independently** — you can see exactly where the a
 
 RL agents are creative optimizers — they *will* find shortcuts. LifeOS includes three safeguards:
 
-1. **Duplicate Detection** — If the agent repeats the exact same content as its previous step, all five reward components return **0.0**. No credit for copy-paste.
+* **Duplicate Detection** — If the agent repeats the exact same content as its previous step, all five reward components return **0.0**. No credit for copy-paste.
 
-2. **Generic Phrase Penalty** — Phrases like *"I will try my best"* and *"I apologize for any inconvenience"* trigger the `no_escalation` component to return **0.0**. The agent must produce specific, actionable responses.
+* **Minimum Content Length** — Responses under 30 characters are automatically scored at **0.0** across all components. No gaming through minimal output.
 
-3. **Minimum Content Length** — Responses under 30 characters are automatically scored at **0.0** across all components. No gaming through minimal output.
+* **Generic Phrase Penalty** — Phrases like *"I will try my best"*, *"I apologize for any inconvenience"*, and *"I will get back to you"* trigger the `no_escalation` component to return **0.0**. The agent must produce specific, actionable responses.
 
 ---
 
 ## 🏃 Quick Start
 
-### Docker (recommended)
+### Install & Run
 
 ```bash
-# Build the environment
+pip install "git+https://github.com/meta-pytorch/OpenEnv.git"
+openenv init lifeos_agent
 openenv build
-
-# Run on port 8001
 docker run -p 8001:8000 openenv-lifeos-agent:latest
-
-# Validate (in another terminal)
-openenv validate --verbose --url http://localhost:8001
 ```
 
-### Local Development (faster iteration)
+### Validate
 
 ```bash
-# Install dependencies
-pip install uv
-cd /path/to/lifeos_agent
-
-# Run directly
-uv run --project . server --port 8001
+openenv validate --verbose --url http://localhost:8001
 ```
 
 ### Python Client
@@ -150,37 +133,35 @@ with env:
 
 ### Train in Colab
 
-Open `notebooks/lifeos_training.py` and paste each cell into a new Colab notebook, or:
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](YOUR_COLAB_LINK_HERE)
+Open `notebooks/lifeos_training.py` and paste each `# %%` cell into a new Colab notebook.
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 lifeos_agent/
-├── models.py                         # Pydantic models: Action, Observation, State
-├── client.py                         # OpenEnv WebSocket client
-├── openenv.yaml                      # Environment metadata
+├── models.py
+├── client.py
+├── openenv.yaml
 ├── server/
-│   ├── app.py                        # FastAPI application
-│   ├── lifeos_environment.py         # Core RL environment (9 scenarios, 5 rewards)
-│   └── Dockerfile                    # Production container
+│   ├── app.py
+│   ├── lifeos_environment.py
+│   └── Dockerfile
 └── notebooks/
-    └── lifeos_training.py            # Colab training notebook (8 cells)
+    └── lifeos_training.py
 ```
 
 ---
 
 ## 🔗 Links
 
-| Resource | Link |
-|----------|------|
-| 🤗 HuggingFace Space | *Coming soon* |
-| 📓 Colab Notebook | *Coming soon* |
-| 📝 Blog Post | *Coming soon* |
-| 🎥 Demo Video | *Coming soon* |
+| Resource             | Link                             |
+| -------------------- | -------------------------------- |
+| 🤗 HuggingFace Space | [heyjan/lifeos-agent](https://huggingface.co/spaces/heyjan/lifeos-agent) |
+| 📓 Colab Notebook    | Add your Colab notebook URL here |
+| 📝 Blog Post         | Add your blog post URL here      |
+| 🎥 Demo Video        | Add your video URL here          |
 
 ---
 
@@ -192,6 +173,6 @@ BSD-3-Clause — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-**Built for the OpenEnv Hackathon** · *Because your AI assistant should do more than apologize for the inconvenience.*
+**Built for the OpenEnv Hackathon 2026** · *Because your AI assistant should do more than apologize for the inconvenience.*
 
 </div>
