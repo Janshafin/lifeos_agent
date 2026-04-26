@@ -457,6 +457,7 @@ with gr.Blocks(title="LifeOS Agent — The AI That Handles Your Worst Day", css=
 
 **Links:**
 [GitHub](https://github.com/Janshafin/lifeos_agent) ·
+[Kaggle Notebook](https://www.kaggle.com/code/janshafin/notebook977bbcf097) ·
 [HuggingFace Space](https://huggingface.co/spaces/heyjan/lifeos-agent) ·
 [Blog Post](https://huggingface.co/spaces/heyjan/lifeos-agent/blob/main/blog.md)
 

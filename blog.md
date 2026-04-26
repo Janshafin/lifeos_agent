@@ -216,7 +216,7 @@ The model learned to produce genuinely useful responses — not game the reward 
 
 **💻 [GitHub](https://github.com/Janshafin/lifeos_agent)** — Full source code, environment implementation, and training notebook.
 
-**📓 Training Notebook** — Upload `notebooks/lifeos_training.py` to Kaggle or Colab with a T4 GPU. Run all cells. Training completes in ~30 minutes.
+**📓 [Training Notebook](https://www.kaggle.com/code/janshafin/notebook977bbcf097)** — Reproduce the training on a Kaggle T4 GPU. Run all cells. Training completes in ~30 minutes.
 
 ---
 

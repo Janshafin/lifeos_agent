@@ -129,7 +129,7 @@ python app_ui.py
 
 **Option 3 — Reproduce training (Kaggle T4 GPU):**
 
-Upload `notebooks/lifeos_training.py` to a Kaggle notebook with T4x2 GPU. Run all cells — training completes in ~30 minutes.
+[📓 Open Kaggle Training Notebook →](https://www.kaggle.com/code/janshafin/notebook977bbcf097)
 
 ## 📁 Project Structure
 
@@ -155,6 +155,7 @@ lifeos_agent/
 | Resource | Link |
 |---|---|
 | 🆘 HuggingFace Space | [Live Demo](https://huggingface.co/spaces/heyjan/lifeos-agent) |
+| 📓 Kaggle Notebook | [Training Notebook](https://www.kaggle.com/code/janshafin/notebook977bbcf097) |
 | 💻 GitHub | [Source Code](https://github.com/Janshafin/lifeos_agent) |
 | 📝 Blog Post | [blog.md](https://huggingface.co/spaces/heyjan/lifeos-agent/blob/main/blog.md) |
 
