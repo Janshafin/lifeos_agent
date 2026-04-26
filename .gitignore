@@ -2,3 +2,9 @@ hf_deploy/
 reward_curve.png
 components_curve.png
 *.png
+
+__pycache__/
+*.pyc
+.DS_Store
+openenv_lifeos_agent.egg-info/
+.venv/
