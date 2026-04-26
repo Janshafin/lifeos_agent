@@ -405,4 +405,5 @@ with gr.Blocks(title="LifeOS Agent — The AI That Handles Your Worst Day", css=
     demo.load(on_scenario_change, inputs=[scenario_dd], outputs=[diff_badge, scenario_desc])
 
 if __name__ == "__main__":
-    demo.launch(share=False, server_port=7860)
+    demo.launch(share=False, server_name="0.0.0.0", server_port=7860)
+

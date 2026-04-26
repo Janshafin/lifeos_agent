@@ -3,9 +3,7 @@ title: LifeOS Agent
 emoji: 🆘
 colorFrom: red
 colorTo: blue
-sdk: gradio
-sdk_version: 4.44.0
-app_file: app_ui.py
+sdk: docker
 pinned: true
 ---
 
