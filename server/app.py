@@ -1,38 +1,41 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+# Copyright (c) LifeOS Team 2026. All rights reserved.
+# BSD-3-Clause License
 
 """
 FastAPI application for the LifeOS Agent Environment.
 
-This module creates an HTTP server that exposes the LifeOSEnvironment
-over HTTP and WebSocket endpoints, compatible with EnvClient.
+Creates an HTTP + WebSocket server using OpenEnv's create_app, exposing
+the LifeOSEnvironment for both programmatic RL training and interactive
+demos.
 
 Endpoints:
-    - POST /reset: Reset the environment
-    - POST /step: Execute an action
+    - POST /reset: Reset the environment with a new crisis scenario
+    - POST /step: Execute an action and receive reward
     - GET /state: Get current environment state
-    - GET /schema: Get action/observation schemas
+    - GET /schema: Get action/observation JSON schemas
+    - GET /health: Health check
+    - GET /metadata: Environment metadata
+    - POST /mcp: MCP JSON-RPC endpoint
     - WS /ws: WebSocket endpoint for persistent sessions
 
 Usage:
-    # Development (with auto-reload):
+    # Development:
     uvicorn server.app:app --reload --host 0.0.0.0 --port 8000
 
     # Production:
     uvicorn server.app:app --host 0.0.0.0 --port 8000 --workers 4
 
-    # Or run directly:
+    # Run directly:
     python -m server.app
 """
 
+from __future__ import annotations
+
 try:
-    from openenv.core.env_server.http_server import create_app
-except Exception as e:  # pragma: no cover
+    from openenv.core import create_app
+except ImportError as e:
     raise ImportError(
-        "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
+        "openenv is required. Install with: pip install openenv-core"
     ) from e
 
 try:
@@ -43,7 +46,10 @@ except (ImportError, ModuleNotFoundError):
     from server.lifeos_environment import LifeOSEnvironment
 
 
-# Create the app with web interface and README integration
+# ──────────────────────────────────────────────────────────────────────
+# Create the OpenEnv FastAPI application
+# ──────────────────────────────────────────────────────────────────────
+
 app = create_app(
     LifeOSEnvironment,
     LifeOSAction,
@@ -53,22 +59,17 @@ app = create_app(
 )
 
 
-def main(host: str = "0.0.0.0", port: int = 8000):
-    """
-    Entry point for direct execution via uv run or python -m.
+# ──────────────────────────────────────────────────────────────────────
+# Entry point for direct execution
+# ──────────────────────────────────────────────────────────────────────
 
-    This function enables running the server without Docker:
-        uv run --project . server
-        uv run --project . server --port 8001
-        python -m lifeos_agent.server.app
+
+def main(host: str = "0.0.0.0", port: int = 8000) -> None:
+    """Run the server directly without Docker.
 
     Args:
-        host: Host address to bind to (default: "0.0.0.0")
-        port: Port number to listen on (default: 8000)
-
-    For production deployments, consider using uvicorn directly with
-    multiple workers:
-        uvicorn lifeos_agent.server.app:app --workers 4
+        host: Host address to bind to (default: "0.0.0.0").
+        port: Port number to listen on (default: 8000).
     """
     import uvicorn
 
@@ -78,8 +79,8 @@ def main(host: str = "0.0.0.0", port: int = 8000):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser = argparse.ArgumentParser(description="LifeOS Agent Server")
+    parser.add_argument("--port", type=int, default=8000, help="Port (default: 8000)")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host (default: 0.0.0.0)")
     args = parser.parse_args()
     main(host=args.host, port=args.port)

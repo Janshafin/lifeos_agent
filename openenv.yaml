@@ -1,44 +1,165 @@
-spec_version: 1
+# ══════════════════════════════════════════════════════════════════════════════
+# LifeOS Agent — OpenEnv Environment Configuration
+# ══════════════════════════════════════════════════════════════════════════════
+# The AI that handles your worst day. Trains LLMs to resolve cascading
+# personal life crises through structured multi-stakeholder communication,
+# 5 independent reward functions, and curriculum learning.
+# ══════════════════════════════════════════════════════════════════════════════
+
 name: lifeos-agent
 version: 0.2.0
 description: >
-  An OpenEnv-compliant RL training environment that trains LLMs to handle
-  cascading personal life crises involving multiple stakeholders, time pressure,
-  and competing priorities. Unlike existing environments that test generic
-  reasoning, LifeOS Agent targets the specific capability gap of multi-stakeholder
-  personal conflict resolution — training models to go from describing solutions
-  to executing them with real communication actions.
+  A novel reinforcement learning environment that trains language models to
+  resolve cascading real-life crises — cancelled flights, family emergencies,
+  and colliding deadlines — through structured multi-stakeholder communication.
+  Features 9 handcrafted crisis scenarios across 3 difficulty tiers with
+  curriculum learning, 5 independent reward functions measuring conflict
+  resolution quality, and anti-reward-hacking safeguards that prevent the
+  agent from gaming the training signal.
+
 author: LifeOS Team
+license: BSD-3-Clause
 theme: personalized-tasks
+
 tags:
   - personal-assistant
-  - crisis-management
-  - multi-stakeholder
-  - curriculum-learning
-  - reward-decomposition
   - conflict-resolution
-type: space
-runtime: fastapi
+  - negotiation
+  - curriculum-learning
+  - multi-stakeholder
+  - reinforcement-learning
+  - crisis-management
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Entry Points
+# ──────────────────────────────────────────────────────────────────────────────
+
 entry_point: server/app.py
-app: server.app:app
-port: 8000
 environment_class: LifeOSEnvironment
 action_class: LifeOSAction
 observation_class: LifeOSObservation
 state_class: LifeOSState
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Reward Components — 5 independent functions, weights sum to 1.00
+# ──────────────────────────────────────────────────────────────────────────────
+# Each component is computed independently. No component depends on another.
+# Total reward per step = min(sum of all components, 1.0).
+
 reward_components:
-  - name: conflict_addressed
+  conflict_addressed:
     weight: 0.30
-    description: Does the action content reference an active conflict keyword?
-  - name: stakeholder_reached
+    description: >
+      Does the action reference an actual active conflict? Extracts keywords
+      from conflict names (e.g. 'flight_cancelled' → 'flight', 'cancelled')
+      and checks if any appear in the action content. Full credit (0.30) for
+      keyword match; partial credit (0.05) for substantive content without
+      a direct match.
+
+  stakeholder_reached:
     weight: 0.25
-    description: Is the target person one of the scenario's personas?
-  - name: action_specificity
+    description: >
+      Is the target person a real persona in the current scenario? Full
+      credit (0.25) for matching a persona name; partial credit (0.05)
+      for targeting any named person even if not an exact match.
+
+  action_specificity:
     weight: 0.20
-    description: Does the content contain both a time reference and an action verb?
-  - name: format_compliance
+    description: >
+      Does the message contain specific action verbs (reschedule, call,
+      delegate, etc.) and concrete time references (within 1 hour, by 5pm,
+      tomorrow morning, etc.)? Full credit (0.20) for both; half credit
+      (0.10) for either one alone.
+
+  format_compliance:
     weight: 0.15
-    description: Is reasoning substantive (>40 chars) with a valid urgency level?
-  - name: no_escalation
+    description: >
+      Is the reasoning field substantive (>40 characters) and the urgency
+      value valid (immediate, within_hour, today, tomorrow)? Full credit
+      (0.15) for both; partial credit (0.07) for either one alone.
+
+  no_escalation:
     weight: 0.10
-    description: Are generic filler phrases absent from the response?
+    description: >
+      Are generic LLM filler phrases absent from the response? Penalizes
+      canned responses like 'I will try my best' or 'I apologize for any
+      inconvenience'. Full credit (0.10) for authentic, specific language;
+      zero credit if any generic phrase is detected.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Anti-Reward-Hacking Safeguards
+# ──────────────────────────────────────────────────────────────────────────────
+
+anti_hacking:
+  duplicate_content_guard: >
+    If the agent submits identical content to its previous action,
+    all reward components return 0.0 for that step.
+  minimum_length_guard: >
+    If the action content is fewer than 30 characters, all reward
+    components return 0.0 for that step.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Curriculum Learning
+# ──────────────────────────────────────────────────────────────────────────────
+
+curriculum:
+  stages:
+    - name: easy
+      episodes: "1-8"
+      conflicts_per_scenario: 1
+      scenario_count: 3
+    - name: medium
+      episodes: "9-16"
+      conflicts_per_scenario: 2
+      scenario_count: 3
+    - name: hard
+      episodes: "17+"
+      conflicts_per_scenario: "3-4"
+      scenario_count: 3
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Scenarios — 9 total across 3 tiers
+# ──────────────────────────────────────────────────────────────────────────────
+
+scenarios:
+  easy:
+    - id: easy_01
+      title: Meeting Overrun
+    - id: easy_02
+      title: Missed Client Call
+    - id: easy_03
+      title: Team Blocker
+  medium:
+    - id: medium_01
+      title: Travel Delay Cascade
+    - id: medium_02
+      title: Work-Family Collision
+    - id: medium_03
+      title: Double-Booked VPs
+  hard:
+    - id: hard_01
+      title: Total Travel Meltdown
+    - id: hard_02
+      title: Team Collapse
+    - id: hard_03
+      title: Budget Crisis Firestorm
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Episode Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+
+episode:
+  max_steps: 10
+  action_types:
+    - send_message
+    - reschedule
+    - book_alternative
+    - delegate
+    - decline
+    - escalate
+    - negotiate
+  urgency_levels:
+    - immediate
+    - within_hour
+    - today
+    - tomorrow

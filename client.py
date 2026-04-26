@@ -1,4 +1,20 @@
-"""LifeOS Agent – OpenEnv WebSocket client."""
+# Copyright (c) LifeOS Team 2026. All rights reserved.
+# BSD-3-Clause License
+
+"""
+WebSocket client for the LifeOS Agent environment.
+
+Subclasses openenv.core.EnvClient to provide typed interaction with
+the LifeOS environment server over WebSocket.
+
+Usage:
+    from client import create_env
+
+    env = create_env("http://localhost:8001").sync()
+    with env:
+        result = env.reset(seed=42)
+        print(result.observation.scenario_description)
+"""
 
 from __future__ import annotations
 
@@ -7,63 +23,70 @@ from typing import Any, Dict
 from openenv.core import EnvClient
 from openenv.core.client_types import StepResult
 
-from .models import LifeOSAction, LifeOSObservation, LifeOSState
+from models import LifeOSAction, LifeOSObservation, LifeOSState
 
 
 class LifeOSEnvClient(EnvClient[LifeOSAction, LifeOSObservation, LifeOSState]):
-    """Async WebSocket client for the LifeOS Agent environment.
+    """Typed WebSocket client for the LifeOS Agent environment.
 
-    Example (async)::
-
-        async with LifeOSEnvClient(base_url="http://localhost:8000") as env:
-            result = await env.reset(seed=42)
-            while not result.done:
-                action = agent.decide(result.observation)
-                result = await env.step(action)
-
-    Example (sync wrapper)::
-
-        env = LifeOSEnvClient(base_url="http://localhost:8000").sync()
-        with env:
-            result = env.reset()
-            result = env.step(action)
+    Converts between Python model objects and the JSON payloads expected
+    by the OpenEnv server protocol.
     """
 
-    # ── payload / parse overrides ───────────────────────────────────────
-
     def _step_payload(self, action: LifeOSAction) -> Dict[str, Any]:
-        """Serialise a :class:`LifeOSAction` to the JSON dict sent to the server."""
+        """Convert a LifeOSAction to JSON for the server.
+
+        Args:
+            action: The structured action to send.
+
+        Returns:
+            Dictionary payload matching the server's expected schema.
+        """
         return action.model_dump()
 
     def _parse_result(self, payload: Dict[str, Any]) -> StepResult[LifeOSObservation]:
-        """Parse the server response into a :class:`StepResult`.
+        """Convert server JSON response to a typed StepResult.
 
-        Expected *payload* keys:
-            - ``observation`` – dict matching :class:`LifeOSObservation`
-            - ``reward``      – float (step reward)
-            - ``done``        – bool  (episode termination flag)
+        Args:
+            payload: Raw JSON dictionary from the server.
+
+        Returns:
+            StepResult containing LifeOSObservation, reward, and done flag.
         """
-        obs_data = payload.get("observation", {})
-        observation = LifeOSObservation(**obs_data)
-
+        observation = LifeOSObservation(**payload.get("observation", payload))
+        reward = payload.get("reward", 0.0)
+        done = payload.get("done", False)
         return StepResult(
             observation=observation,
-            reward=float(payload.get("reward", 0.0)),
-            done=bool(payload.get("done", False)),
+            reward=reward,
+            done=done,
         )
 
     def _parse_state(self, payload: Dict[str, Any]) -> LifeOSState:
-        """Parse the server's state response into a :class:`LifeOSState`."""
-        return LifeOSState(**payload.get("state", payload))
+        """Convert server JSON state response to a typed LifeOSState.
 
+        Args:
+            payload: Raw JSON dictionary from the server.
 
-# ── convenience factory ─────────────────────────────────────────────────────
+        Returns:
+            LifeOSState with current episode tracking information.
+        """
+        return LifeOSState(**payload)
 
 
 def create_env(base_url: str = "http://localhost:8001") -> LifeOSEnvClient:
-    """Create a :class:`LifeOSEnvClient` pointed at *base_url*.
+    """Factory function to create a LifeOS environment client.
 
-    The caller is responsible for connecting (either ``await client.connect()``
-    or using the async context manager).
+    Args:
+        base_url: URL of the running LifeOS environment server.
+
+    Returns:
+        LifeOSEnvClient instance. Call .sync() for synchronous usage.
+
+    Example:
+        env = create_env("http://localhost:8001").sync()
+        with env:
+            result = env.reset(seed=42)
+            result = env.step(LifeOSAction(...))
     """
     return LifeOSEnvClient(base_url=base_url)

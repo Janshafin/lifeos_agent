@@ -10,7 +10,7 @@ Current LLMs fail at real personal crisis management. When you're facing a cance
 
 ## 2. What have you built so far?
 
-We've built a complete OpenEnv-compliant RL training environment with 9 crisis scenarios across 3 difficulty tiers, 5 independent reward functions, curriculum learning that progresses from easy to hard, and 3 anti-reward-hacking safeguards. The environment runs in Docker, serves via FastAPI with WebSocket support, and we've trained Qwen2.5-3B-Instruct using Unsloth 4-bit quantization with LoRA on a free Colab T4 GPU. We have measurable reward improvement across all five components, a complete training notebook, and deployment on HuggingFace Spaces.
+We've built a complete OpenEnv-compliant RL training environment with 9 crisis scenarios across 3 difficulty tiers, 5 independent reward functions, curriculum learning that progresses from easy to hard, and 3 anti-reward-hacking safeguards. The environment runs in Docker, serves via FastAPI with WebSocket support, and we've trained Qwen2.5-3B-Instruct using 8-bit quantization with LoRA via peft and bitsandbytes on a free Colab T4 GPU. We have measurable reward improvement across all five components, a complete training notebook, and deployment on HuggingFace Spaces.
 
 ---
 

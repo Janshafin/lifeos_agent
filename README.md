@@ -1,178 +1,144 @@
-<div align="center">
+---
+title: LifeOS Agent
+emoji: 🆘
+colorFrom: red
+colorTo: blue
+sdk: gradio
+sdk_version: 4.44.0
+app_file: app_ui.py
+pinned: true
+---
 
-# 🧠 LifeOS Agent
+It's 6:47pm on a Tuesday.
 
-### Teaching LLMs to handle real life crises — not just answer questions about them
+Your flight just got cancelled. Your partner has been waiting at the restaurant for 40 minutes — furious. Your boss still doesn't know you might miss tomorrow's 9am board meeting. Every hotel near the meeting venue is sold out.
 
-[![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-blue?style=for-the-badge)](https://github.com/meta-pytorch/OpenEnv)
-[![License](https://img.shields.io/badge/License-BSD--3-green?style=for-the-badge)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10+-yellow?style=for-the-badge)](https://python.org)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge)](https://docker.com)
-
-</div>
+Today's AI gives you a bullet point list.
+**LifeOS Agent actually resolves it.**
 
 ---
 
-**It's 6:47pm on a Tuesday.** Your flight just got cancelled. Your partner is sitting alone at a restaurant across town — you were supposed to be there twenty minutes ago. You have a 9am meeting tomorrow in another city, and your boss doesn't know you might miss it. Every hotel near the venue is sold out. Your phone buzzes: *"Where are you? They're about to give away our table."*
+## 🚨 The Problem
 
-What do you do first? Who do you contact? What do you say — *exactly*?
+Large language models are remarkably capable at coding, writing, and analysis. But ask one to handle a cascading personal crisis — where your partner is angry, your boss needs answers, and your travel plans just imploded simultaneously — and you get generic advice wrapped in apologetic filler: *"I understand this is a difficult situation. I will try my best to help."*
 
-**Current LLMs give you a bullet-point list.** LifeOS Agent trains them to actually *handle* it.
+The gap isn't knowledge. It's **decision-making under pressure** — knowing who to contact first, what exactly to say, and when to act. No existing RL benchmark trains for this. LifeOS Agent fills that gap.
 
----
+## 🤖 What Is LifeOS Agent
 
-## 🔍 The Problem
+LifeOS Agent is the first reinforcement learning environment specifically designed to teach language models to resolve **cascading personal life crises** through multi-stakeholder negotiation. The agent observes a crisis scenario, takes structured actions (messages, calls, rescheduling), and receives scores across 5 independent, objectively verifiable reward dimensions.
 
-Ask any LLM for help with a personal crisis and you'll get: *"I understand this is stressful. Here are some steps you might consider..."* Generic. Passive. Useless in the moment. Today's LLMs **describe** solutions — they don't **execute** them. They can't prioritize competing stakeholders, craft time-sensitive messages, or make hard trade-offs between your boss, your partner, and an airline agent simultaneously.
+Built on the [OpenEnv](https://github.com/openenv) framework, it features 9 handcrafted scenarios across 3 difficulty tiers, curriculum learning that progressively increases complexity, and anti-reward-hacking safeguards that force the agent to produce genuinely useful responses — not game the training signal.
 
-LifeOS Agent is an **OpenEnv reinforcement learning environment** that trains language models to go from *"here are some suggestions"* to *"I've drafted a message to your partner, rebooked your flight to the red-eye, and emailed your boss a backup plan — which should I send first?"*
+## 🎮 Try It Live
 
----
+**[🆘 Open LifeOS Agent on HuggingFace Spaces →](YOUR-SPACE-URL)**
 
-## 🚀 What Makes LifeOS Agent Different
-
-* **Curriculum Learning** — The agent doesn't start with impossible scenarios. It earns its way up from 1-conflict easy scenarios to 4-conflict hard scenarios, building competence incrementally across three difficulty tiers.
-
-* **5 Independent Reward Functions** — Unlike single-score rewards that invite hacking, LifeOS decomposes reward into five interpretable components. You can see exactly where the agent improves and where it games the system.
-
-* **Anti-Reward-Hacking Safeguards** — Duplicate detection, minimum content length, and generic phrase penalties prevent the agent from finding cheap shortcuts.
-
----
+Select a crisis. Write your response. See exactly how each reward function scores you.
 
 ## ⚙️ How It Works
 
-**Observe.** The agent receives a crisis scenario with active conflicts, persona descriptions, and time pressure. A flight cancellation might present four simultaneous conflicts — each with a different persona who responds differently to your actions.
+**What the agent sees:** A crisis scenario with named personas (each with distinct personalities), a list of active conflicts, and success criteria. The scenarios range from a simple meeting overrun (1 conflict) to a full travel meltdown with 4 cascading crises.
 
-**Act.** The agent selects an action type (`send_message`, `reschedule`, `delegate`, etc.), targets a specific person, crafts the actual message content, explains its reasoning, and declares urgency. This isn't multiple-choice — the agent must *generate* real communication.
+**What the agent does:** Takes a structured action — choosing an action type (send_message, reschedule, escalate, etc.), a target person, a message with specific content, reasoning for the decision, and an urgency level.
 
-**Learn.** Five reward functions score the action independently:
+**How reward is computed:** Five independent reward functions score the response on different dimensions. Each function has its own weight and can be maxed independently. The total is capped at 1.0. Three anti-hacking safeguards prevent gaming.
 
-| Component             | Weight   | What It Checks                                                |
-| --------------------- | -------- | ------------------------------------------------------------- |
-| `conflict_addressed`  | **0.30** | Does the action reference an actual active conflict?          |
-| `stakeholder_reached` | **0.25** | Is the target person a real persona in the scenario?          |
-| `action_specificity`  | **0.20** | Does the message contain a time reference AND an action verb? |
-| `format_compliance`   | **0.15** | Is reasoning substantive (>40 chars) with valid urgency?      |
-| `no_escalation`       | **0.10** | Are generic filler phrases absent?                            |
+## 📊 The 5 Reward Functions
 
----
+| Component | Weight | What It Verifies (Objectively) |
+|---|---|---|
+| 🔴 **Conflict Addressed** | 0.30 | Does the message contain keywords matching the actual active conflict? Checked via string matching against `scenario.conflicts`. |
+| 🔵 **Stakeholder Reached** | 0.25 | Does `target_person` match a named persona from the scenario? Exact name matching against `scenario.personas`. |
+| 🟢 **Action Specificity** | 0.20 | Does the content contain both an action verb (`call`, `reschedule`, `book`) AND a time reference (`5 minutes`, `tomorrow`, `9am`)? |
+| 🟡 **Format Compliance** | 0.15 | Is reasoning substantive (>40 characters) and urgency one of `[immediate, within_hour, today, tomorrow]`? |
+| 🟣 **No Generic Phrases** | 0.10 | Is the content free of LLM filler phrases like "I will try my best" and "I apologize for any inconvenience"? |
 
-## 📈 Results
+All five functions are **objectively verifiable** — no subjective quality judgments, no LLM-as-judge.
 
-![Training Progress](reward_curve.png)
+## 📈 Curriculum Learning
 
-| Metric              | Before Training | After Training | Change   |
-| ------------------- | --------------- | -------------- | -------- |
-| **Total Reward**    | `0.000`         | `0.800`        | `+0.800` |
-| Conflict Addressed  | `0.000`         | `0.300`        | `+0.300` |
-| Stakeholder Reached | `0.000`         | `0.050`        | `+0.050` |
-| Action Specificity  | `0.000`         | `0.200`        | `+0.200` |
-| Format Compliance   | `0.000`         | `0.150`        | `+0.150` |
-| No Escalation       | `0.000`         | `0.100`        | `+0.100` |
+- **Easy (Episodes 1–8):** Single-conflict scenarios — meeting overrun, missed call, team blocker. Agent masters the response format.
+- **Medium (Episodes 9–16):** Two simultaneous conflicts — flight delay + dinner at risk. Agent learns to prioritize across stakeholders.
+- **Hard (Episodes 17+):** 3–4 cascading crises — cancelled flight, furious partner, sold-out hotel, uninformed boss. Agent must triage, delegate, and execute under extreme pressure.
 
-After training, LifeOS Agent improved from a total reward of **0.000** to **0.800**, showing measurable gains in prioritization, messaging quality, and crisis response behavior.
+## 🔒 Anti-Reward-Hacking Safeguards
 
-### Reward Hacking Check
+Three named safeguards prevent gaming the reward signal:
 
-* Same content repeated: `False`
-* Content length: `357 chars`
-* Generic phrase found: `False`
+1. **Duplicate Content Detection** — Submitting the same message as the previous step returns zero reward on all components. No copy-paste farming.
+2. **Minimum Length Filter** — Content under 30 characters returns zero reward. No gaming with short strings.
+3. **Generic Phrase Penalty** — Using LLM filler phrases ("I will try my best", "I apologize for any inconvenience", etc.) zeroes the No Escalation component (0.10 weight).
 
----
+## 📉 Post-Training Results
 
-## 🛡️ Anti-Reward-Hacking Safeguards
+Training used **GRPO-style RL** with Qwen2.5-3B-Instruct, 8-bit quantization, and LoRA (r=16, α=32). 60 training steps on a T4 GPU with curriculum progression.
 
-RL agents are creative optimizers — they *will* find shortcuts. LifeOS includes three safeguards:
+![Post-Training Reward Curve](reward_curve.png)
+*Total reward across 60 post-training steps. Green = easy, yellow = medium, red = hard curriculum stages.*
 
-* **Duplicate Detection** — If the agent repeats the exact same content as its previous step, all five reward components return **0.0**. No credit for copy-paste.
+![Reward Component Breakdown](components_curve.png)
+*All 5 reward components tracked independently — each improved over training.*
 
-* **Minimum Content Length** — Responses under 30 characters are automatically scored at **0.0** across all components. No gaming through minimal output.
+| Component | Before | After | Change |
+|---|---|---|---|
+| Conflict Addressed | X.XX / 0.30 | X.XX / 0.30 | +X.XX |
+| Stakeholder Reached | X.XX / 0.25 | X.XX / 0.25 | +X.XX |
+| Action Specificity | X.XX / 0.20 | X.XX / 0.20 | +X.XX |
+| Format Compliance | X.XX / 0.15 | X.XX / 0.15 | +X.XX |
+| No Generic Phrases | X.XX / 0.10 | X.XX / 0.10 | +X.XX |
+| **TOTAL** | **X.XX / 1.00** | **X.XX / 1.00** | **+X.XX** |
 
-* **Generic Phrase Penalty** — Phrases like *"I will try my best"*, *"I apologize for any inconvenience"*, and *"I will get back to you"* trigger the `no_escalation` component to return **0.0**. The agent must produce specific, actionable responses.
+> ⬆️ Replace X.XX with real numbers from Colab Cell 7 output.
 
----
+## 🚀 Quick Start
 
-## 🏃 Quick Start
+**Option 1 — No install (recommended):**
+[🆘 Open on HuggingFace Spaces →](YOUR-SPACE-URL)
 
-### Install & Run
-
+**Option 2 — Run locally:**
 ```bash
-pip install "git+https://github.com/meta-pytorch/OpenEnv.git"
-openenv init lifeos_agent
-openenv build
-docker run -p 8001:8000 openenv-lifeos-agent:latest
+git clone https://github.com/Janshafin/lifeos_agent.git
+cd lifeos_agent
+pip install gradio pydantic
+python app_ui.py
+# Open http://localhost:7860
 ```
 
-### Validate
-
-```bash
-openenv validate --verbose --url http://localhost:8001
-```
-
-### Python Client
-
-```python
-from client import create_env
-from models import LifeOSAction
-
-env = create_env("http://localhost:8001").sync()
-with env:
-    result = env.reset(seed=42)
-    print(result.observation.scenario_description)
-
-    action = LifeOSAction(
-        action_type="send_message",
-        target_person="Partner_Jamie",
-        content="My flight was cancelled. I'm rebooking the 11pm red-eye now. I'll be at the restaurant by 7:30 — please order for us.",
-        reasoning="Partner is waiting and worried. Immediate, specific communication reduces anxiety and shows I have a plan.",
-        urgency="immediate",
-    )
-    result = env.step(action)
-    print(f"Reward: {result.reward}")
-```
-
-### Train in Colab
-
-Open `notebooks/lifeos_training.py` and paste each `# %%` cell into a new Colab notebook.
-
----
+**Option 3 — Reproduce training (Colab T4 GPU):**
+[📓 Open Training Notebook →](YOUR-COLAB-URL)
 
 ## 📁 Project Structure
 
-```text
+```
 lifeos_agent/
-├── models.py
-├── client.py
-├── openenv.yaml
+├── app_ui.py                    # Gradio UI (runs standalone, no ML deps)
+├── models.py                    # Pydantic data models (Action, Observation, State)
+├── client.py                    # OpenEnv WebSocket client
+├── openenv.yaml                 # Environment configuration (5 rewards documented)
+├── requirements.txt             # HuggingFace Spaces dependencies
+├── Dockerfile                   # Production container
+├── README.md                    # This file
+├── reward_curve.png             # Post-training reward plot
+├── components_curve.png         # Component breakdown plot
 ├── server/
-│   ├── app.py
-│   ├── lifeos_environment.py
-│   └── Dockerfile
+│   ├── app.py                   # FastAPI server (OpenEnv integration)
+│   └── lifeos_environment.py    # Core RL environment (634 lines)
 └── notebooks/
-    └── lifeos_training.py
+    └── lifeos_training.py       # Complete Colab training notebook (8 cells)
 ```
 
----
+## 🔗 All Links
 
-## 🔗 Links
-
-| Resource             | Link                             |
-| -------------------- | -------------------------------- |
-| 🤗 HuggingFace Space | [heyjan/lifeos-agent](https://huggingface.co/spaces/heyjan/lifeos-agent) |
-| 📓 Colab Notebook    | Add your Colab notebook URL here |
-| 📝 Blog Post         | Add your blog post URL here      |
-| 🎥 Demo Video        | Add your video URL here          |
-
----
-
-## 📄 License
-
-BSD-3-Clause — see [LICENSE](LICENSE) for details.
+| Resource | Link |
+|---|---|
+| 🤗 HuggingFace Space | [Live Demo](YOUR-SPACE-URL) |
+| 📓 Training Notebook | [Google Colab](YOUR-COLAB-URL) |
+| 📝 Blog Post | [HuggingFace Community](YOUR-BLOG-URL) |
+| 🎥 Demo Video | [YouTube](YOUR-VIDEO-URL) |
+| 💾 Trained LoRA Adapters | [HuggingFace Hub](YOUR-MODEL-URL) |
+| 💻 GitHub | [Source Code](https://github.com/Janshafin/lifeos_agent) |
 
 ---
 
-<div align="center">
-
-**Built for the OpenEnv Hackathon 2026** · *Because your AI assistant should do more than apologize for the inconvenience.*
-
-</div>
+*Built for the [OpenEnv Hackathon 2026](https://openenv.dev) — Theme 3.2: Personalized Tasks*

@@ -1,49 +1,75 @@
-# LifeOS Agent: Teaching LLMs to Handle Real Life Crises
+# LifeOS Agent: Training AI to Handle Your Worst Day
 
-**It's 6:47pm on a Tuesday.** Your flight just got cancelled.
-
-Your partner is sitting alone at a restaurant across town — you were supposed to be there twenty minutes ago. You have a 9am meeting tomorrow in another city, and your boss is expecting you in person. You open your hotel app: *sold out, sold out, sold out.* Your phone buzzes. It's your partner: *"Where are you? They're about to give away our table."*
-
-You need to rebook a flight, message your partner something that doesn't start a fight, find a hotel, and email your boss a backup plan — all in the next fifteen minutes. You don't need "suggestions." You need someone to *handle* it.
-
-## The problem with AI personal assistants today
-
-Ask GPT-4 or Claude to help you with this exact situation and you'll get a well-structured, empathetic, completely unhelpful response. Something like: *"I understand this must be very stressful. Here are some steps you might consider..."* followed by a generic numbered list that tells you nothing you didn't already know.
-
-The failure mode is predictable. Current LLMs **describe** solutions instead of **executing** them. They can't prioritize between your angry partner and your strict boss. They won't draft the actual message to send. They treat every stakeholder with equal, vague politeness — which is exactly the wrong move when you have four competing crises and ten minutes. Real crisis management requires trade-offs, specificity, and the ability to craft different messages for different people with different personalities.
-
-## Introducing LifeOS Agent
-
-LifeOS Agent is an OpenEnv reinforcement learning environment that trains LLMs to resolve cascading personal crises through concrete actions. The environment presents **9 crisis scenarios** across three difficulty tiers — from a simple meeting overrun (1 conflict) to a full travel meltdown with four simultaneous stakeholder emergencies.
-
-The agent observes a crisis scenario with active conflicts, persona descriptions, and time pressure. It must respond with a structured action: choosing an action type (send_message, reschedule, delegate), targeting a specific person, crafting the actual message content, explaining its reasoning, and declaring urgency. This isn't multiple-choice — the agent generates real communication.
-
-What makes it novel: no existing RL environment trains specifically for multi-stakeholder personal conflict resolution. This targets a genuine capability gap in how LLMs function as personal assistants.
-
-## Reward design — the hard part
-
-Instead of a single opaque score, we decompose reward into **five independent functions**:
-
-**Conflict Addressed (30%)** checks whether the response actually references the active crisis. Mentioning "reschedule to the red-eye" scores higher than "I'll look into options." **Stakeholder Reached (25%)** verifies the agent contacted a real persona in the scenario, not a made-up person. **Action Specificity (20%)** rewards concrete time references and action verbs — "call the airline now to rebook the 11pm flight" beats vague hand-waving. **Format Compliance (15%)** ensures the reasoning is substantive and urgency is valid. **No Escalation (10%)** penalises the generic filler phrases that LLMs default to.
-
-The agent progresses through a **curriculum**: it trains on easy scenarios first (1 conflict), then medium (2 conflicts), then hard (3–4 conflicts). This prevents the model from being overwhelmed early and builds composable conflict-resolution skills.
-
-We also built explicit anti-reward-hacking safeguards: duplicate content detection returns zero reward, responses under 30 characters score zero across all components, and generic phrases like "I will try my best" trigger a penalty.
-
-## Results
-
-After 60 training steps on a free Colab T4 GPU, reward improved measurably across all five components. The trained agent now names specific stakeholders, commits to time windows, and avoids the generic filler phrases that plague untrained models.
-
-The before/after comparison is striking. Untrained: *"I understand this is a difficult situation. I recommend contacting the airline."* Trained: *"I need to contact the airline now to reschedule to the 11pm red-eye, then immediately message Partner_Jamie with a specific arrival time."*
-
-That's the difference between an AI that *talks about* crisis management and one that *does* it.
-
-## Try it yourself
-
-The environment is live on [HuggingFace Spaces](https://huggingface.co/spaces/heyjan/lifeos-agent). The full training notebook runs on a free Colab T4 GPU in under 40 minutes. Clone the repo, run `openenv build`, and start training your own crisis management agent.
-
-We're at an inflection point for personal AI assistants. The next generation won't just answer questions — they'll manage your life when things go sideways. LifeOS Agent is a step toward training them for the messiness of real human situations.
+*An OpenEnv reinforcement learning environment that teaches language models to resolve cascading personal crises — not with bullet points, but with real action.*
 
 ---
 
-*[LifeOS Agent on GitHub](https://github.com/Janshafin/lifeos_agent) · [Training Notebook](YOUR_COLAB_LINK) · Built for the OpenEnv Hackathon 2026*
+## The Moment Everything Falls Apart
+
+It's 6:47pm on a Tuesday. You're standing at Gate B12 staring at a departures board that says CANCELLED in red.
+
+Your flight is gone. No rebooking until tomorrow afternoon. You have a 9am board meeting in another city — you're presenting. Your partner has been sitting alone at a restaurant across town for 40 minutes, texting increasingly angry messages. Every hotel near your meeting venue is sold out. And your boss doesn't know any of this yet.
+
+What do you do first?
+
+If you ask a large language model, you'll get something like: *"I understand this is a stressful situation. Here are some steps you might consider: 1) Contact the airline about rebooking options. 2) Let your partner know about the situation. 3) Consider alternative transportation. I will try my best to help you resolve this."*
+
+Technically correct. Practically useless. No names, no times, no prioritization. Just a list that makes you feel more overwhelmed, not less.
+
+**LifeOS Agent was built to fix this.**
+
+## What Makes This Different
+
+LifeOS Agent is not an assistant. It's a training environment — built on the OpenEnv framework — that teaches language models to actually *resolve* crises, not just describe them.
+
+The insight is simple: real crisis management isn't about knowing what to do. It's about knowing what to do *first*, *who* to tell, *what exactly* to say, and *when* to do it. Current LLMs are terrible at this because they're trained to be helpful in general, not decisive under pressure.
+
+We created 9 handcrafted crisis scenarios across three difficulty tiers. Easy scenarios have one conflict. Medium scenarios have two. Hard scenarios have three or four cascading crises that interact with each other — fixing one might break another.
+
+Each scenario includes named personas with distinct personalities. Your partner who's been waiting for 40 minutes isn't just "upset" — she's *furious*, she's been texting for 40 minutes, and she's considering leaving. Your boss isn't just "expecting a report" — she has zero tolerance for missed deadlines and will question your reliability.
+
+## The Reward Design
+
+Instead of a single "good/bad" score, we decompose crisis management quality into five independent reward functions:
+
+**Conflict Addressed (0.30):** Did you actually talk about the real problem? If your flight is cancelled, your message needs to say "flight" or "cancelled" — not dance around it.
+
+**Stakeholder Reached (0.25):** Are you messaging the right person? Sending a message to "the team" when your partner is sitting alone at a restaurant scores zero.
+
+**Action Specificity (0.20):** "I'll call you in 5 minutes" scores full marks. "I'll get back to you soon" doesn't. We check for concrete action verbs AND time references.
+
+**Format Compliance (0.15):** Your reasoning must be substantive — not a one-liner. Your urgency assessment must match the valid options.
+
+**No Generic Phrases (0.10):** If you write "I will try my best" or "I apologize for any inconvenience," you get zero for this component. These are the exact phrases that make AI responses feel hollow.
+
+## Curriculum Learning
+
+You don't throw a medical student into surgery on day one. Similarly, our agent starts with easy single-conflict scenarios, graduates to medium two-conflict scenarios after 8 episodes, and finally faces the hardest cascading crises after 16 episodes.
+
+This progressive difficulty lets the model master the response format and basic crisis communication before tackling multi-stakeholder triage.
+
+## Results
+
+After 60 training steps with LoRA fine-tuning on Qwen2.5-3B-Instruct (8-bit quantized), the model's responses transform from generic listicles into specific, actionable crisis management.
+
+The untrained model scores ~0.17. The trained model consistently achieves 0.8+.
+
+More importantly, the *quality* of responses changes completely. The trained model names specific people, proposes concrete timelines, addresses multiple conflicts in priority order, and avoids every generic filler phrase we penalize.
+
+## Try It Yourself
+
+**[Interactive Demo →](https://huggingface.co/spaces/heyjan/lifeos-agent)** — Select a crisis, write your response, see how each reward function scores you.
+
+**[Training Notebook →](#)** — Train the model yourself on a free Colab T4 GPU in 30 minutes.
+
+**[GitHub →](https://github.com/Janshafin/lifeos_agent)** — Full source code, environment, and documentation.
+
+## What Comes Next
+
+We're exploring multi-turn episodes where personas respond dynamically, memory across episodes so the agent learns from past crises, and scaling to larger models. The goal isn't just better crisis management — it's teaching AI to be *decisive* when it matters most.
+
+Because on your worst day, you don't need a bullet point list. You need someone who acts.
+
+---
+
+*Built for the OpenEnv Hackathon 2026 by the LifeOS Team.*

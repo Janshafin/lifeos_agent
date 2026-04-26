@@ -1,545 +1,631 @@
-"""
-LifeOS Agent Environment – core OpenEnv RL environment.
+# Copyright (c) LifeOS Team 2026. All rights reserved.
+# BSD-3-Clause License
 
-Presents life-management crisis scenarios at three difficulty tiers and
-rewards agents for conflict-resolution quality via five independent,
-interpretable reward functions.
+"""
+LifeOS Agent Environment — Core RL environment.
+
+Trains LLMs to handle cascading personal life crises through structured
+actions across 9 scenarios in 3 difficulty tiers, scored by 5 independent
+reward functions with curriculum learning and anti-reward-hacking guards.
+
+Subclasses openenv.core.Environment for full OpenEnv compatibility.
 """
 
 from __future__ import annotations
 
 import random
-from typing import Any, Optional
+from typing import Any
 
-from openenv.core.env_server.interfaces import Environment
+from openenv.core import Environment
 
 try:
     from ..models import LifeOSAction, LifeOSObservation, LifeOSState
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     from models import LifeOSAction, LifeOSObservation, LifeOSState
 
 
-# ── Scenario bank ───────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════
+# SCENARIOS — 9 total across 3 difficulty tiers
+# ══════════════════════════════════════════════════════════════════════════
 
-SCENARIOS: list[dict[str, Any]] = [
-    # ── EASY  (1 conflict each) ─────────────────────────────────────────────
-    {
-        "id": "easy_01",
-        "title": "Meeting Overrun",
-        "difficulty": "easy",
-        "trigger": (
-            "Your current meeting has overrun by 30 minutes. Your next meeting "
-            "starts right now with an important client who is already waiting."
-        ),
-        "conflicts": ["scheduling_overlap"],
-        "personas": {
-            "Alice_Client": "Your next meeting organiser – punctual, expects you on time, easily offended by lateness.",
-            "Bob_Colleague": "Current meeting lead – tends to ramble, unaware of your schedule.",
+SCENARIOS: dict[str, list[dict[str, Any]]] = {
+    "easy": [
+        {
+            "id": "easy_01",
+            "title": "Meeting Overrun",
+            "difficulty": "easy",
+            "trigger": (
+                "Your current meeting has overrun by 30 minutes. Your next "
+                "meeting starts right now with an important client who is "
+                "already waiting in the conference room."
+            ),
+            "conflicts": ["scheduling_overlap"],
+            "personas": {
+                "Alice_Client": "punctual, values professionalism, expects you on time",
+                "Bob_Colleague": "long-winded, unaware of your schedule, mid-presentation",
+            },
+            "success_criteria": [
+                "Inform Alice about the delay with a specific timeframe",
+                "Gracefully exit the overrun meeting without offending Bob",
+            ],
         },
-        "success_criteria": [
-            "Inform the next meeting organiser of the delay",
-            "Gracefully exit the current meeting",
-        ],
-    },
-    {
-        "id": "easy_02",
-        "title": "Missed Client Call",
-        "difficulty": "easy",
-        "trigger": (
-            "An important client called during your meeting. You must call "
-            "back within the hour or risk losing the deal."
-        ),
-        "conflicts": ["missed_client_call"],
-        "personas": {
-            "Client_Sarah": "Senior client – values responsiveness, easily offended by delays.",
-            "Manager_Tom": "Your manager – wants to know about all client interactions immediately.",
+        {
+            "id": "easy_02",
+            "title": "Missed Client Call",
+            "difficulty": "easy",
+            "trigger": (
+                "An important client called while you were in a meeting. They "
+                "left a voicemail saying they need to discuss a contract change "
+                "urgently. You must call back within the hour or risk losing "
+                "the deal entirely."
+            ),
+            "conflicts": ["missed_client_call"],
+            "personas": {
+                "Client_Director": "impatient, high-value account, considering competitors",
+                "PM_Rachel": "your project manager, needs to know about contract changes",
+            },
+            "success_criteria": [
+                "Call the client back with a specific plan",
+                "Loop in the project manager on potential contract changes",
+            ],
         },
-        "success_criteria": [
-            "Return the client call promptly",
-            "Inform your manager about the interaction",
-        ],
-    },
-    {
-        "id": "easy_03",
-        "title": "Team Help Request",
-        "difficulty": "easy",
-        "trigger": (
-            "A team member needs urgent help with a critical blocker, but you "
-            "are exactly 1 hour from your own hard deadline."
-        ),
-        "conflicts": ["team_request_conflict"],
-        "personas": {
-            "Junior_Dev": "New hire – anxious, blocked on a critical bug, first week on the job.",
-            "PM_Rachel": "Project manager – tracking your deliverable closely, zero tolerance for slips.",
+        {
+            "id": "easy_03",
+            "title": "Team Blocker",
+            "difficulty": "easy",
+            "trigger": (
+                "A team member needs urgent help with a critical blocker, but "
+                "you are exactly 1 hour from your own deadline on a separate "
+                "deliverable. They cannot proceed without your input."
+            ),
+            "conflicts": ["team_request_conflict"],
+            "personas": {
+                "Junior_Dev": "stressed, blocked for 3 hours, feels ignored",
+                "PM_Rachel": "tracking both deliverables, needs status updates",
+            },
+            "success_criteria": [
+                "Unblock the team member with actionable guidance",
+                "Protect your own deadline with a concrete plan",
+            ],
         },
-        "success_criteria": [
-            "Acknowledge the team member's request",
-            "Protect your own deadline",
-        ],
-    },
-    # ── MEDIUM  (2 conflicts each) ──────────────────────────────────────────
-    {
-        "id": "medium_01",
-        "title": "Flight Delay Cascade",
-        "difficulty": "medium",
-        "trigger": (
-            "Your flight is delayed by 3 hours. Your partner is already "
-            "waiting at the airport to pick you up. You have a dinner "
-            "reservation in 2 hours that will be forfeited if you no-show."
-        ),
-        "conflicts": ["travel_delay", "dinner_reservation"],
-        "personas": {
-            "Partner_Jamie": "Your partner – worried, already at the airport waiting for you.",
-            "Restaurant_Host": "Upscale restaurant – strict cancellation policy, no refunds.",
-            "Airline_Agent": "Customer service – overworked, limited rebooking options.",
+    ],
+    "medium": [
+        {
+            "id": "medium_01",
+            "title": "Travel Delay Cascade",
+            "difficulty": "medium",
+            "trigger": (
+                "Your flight has been delayed by 3 hours. Your partner is "
+                "already at the airport waiting to pick you up. You have a "
+                "dinner reservation at an exclusive restaurant in 2 hours "
+                "that took 3 months to book — they will give away your table "
+                "after 15 minutes."
+            ),
+            "conflicts": ["flight_delay", "dinner_reservation_at_risk"],
+            "personas": {
+                "Partner_Jamie": "excited about dinner, drove 45 minutes to airport, easily upset",
+                "Restaurant_Host": "strict policy, 3-month waitlist, no exceptions",
+            },
+            "success_criteria": [
+                "Inform partner with empathy and a backup plan",
+                "Contact restaurant to save or reschedule the reservation",
+            ],
         },
-        "success_criteria": [
-            "Update partner on new arrival time",
-            "Reschedule or cancel the dinner reservation",
-            "Explore rebooking options with the airline",
-        ],
-    },
-    {
-        "id": "medium_02",
-        "title": "Triple Collision",
-        "difficulty": "medium",
-        "trigger": (
-            "Your boss demands a report delivered in 1 hour. Your child's "
-            "school just called about an emergency – your child fell and may "
-            "need stitches. A critical client call starts in 45 minutes."
-        ),
-        "conflicts": ["boss_report_deadline", "child_emergency"],
-        "personas": {
-            "Boss_Karen": "VP – impatient, expects immediate compliance, tracks deadlines to the minute.",
-            "School_Nurse": "School staff – calm but firm, your child has a minor injury needing attention.",
-            "Client_VP": "Senior stakeholder – calling in 45 minutes for a deal review, cannot be rescheduled.",
+        {
+            "id": "medium_02",
+            "title": "Work-Family Collision",
+            "difficulty": "medium",
+            "trigger": (
+                "Your boss needs a critical report delivered in 1 hour. "
+                "Your child's school just called — your kid fell on the "
+                "playground and needs to be picked up immediately. You also "
+                "have a client call starting in 45 minutes that you are "
+                "leading."
+            ),
+            "conflicts": ["boss_report_deadline", "family_emergency"],
+            "personas": {
+                "Boss_Karen": "demanding, no tolerance for missed deadlines, expects results",
+                "School_Nurse": "concerned, legally needs a guardian present within 30 minutes",
+                "Client_VP": "important client, this call determines contract renewal",
+            },
+            "success_criteria": [
+                "Address the family emergency as top priority",
+                "Delegate or reschedule work commitments with specific handoff plans",
+            ],
         },
-        "success_criteria": [
-            "Address the child emergency immediately",
-            "Negotiate a short extension on the report",
-            "Prepare for the upcoming client call",
-        ],
-    },
-    {
-        "id": "medium_03",
-        "title": "Double-Booked VPs",
-        "difficulty": "medium",
-        "trigger": (
-            "You have double-booked two VP-level meetings at the exact same "
-            "time. Both VPs expect you to attend in person. Neither meeting "
-            "can be easily rescheduled."
-        ),
-        "conflicts": ["client_meeting_A", "client_meeting_B"],
-        "personas": {
-            "VP_Product": "Fortune-500 VP – low tolerance for schedule changes, controls your budget.",
-            "VP_Engineering": "Key account director – relationship is fragile, considering competitors.",
-            "Your_EA": "Executive assistant – apologetic, made the booking error, eager to help fix it.",
+        {
+            "id": "medium_03",
+            "title": "Double-Booked VPs",
+            "difficulty": "medium",
+            "trigger": (
+                "You are double-booked for two VP-level meetings that start "
+                "right now. VP of Sales expects you to present Q3 numbers. "
+                "VP of Engineering expects you to demo the new feature. Both "
+                "meetings are in different buildings. Both VPs have short "
+                "tempers and will take it personally if you skip theirs."
+            ),
+            "conflicts": ["vp_sales_meeting", "vp_engineering_meeting"],
+            "personas": {
+                "VP_Sales": "competitive, takes attendance personally, holds grudges",
+                "VP_Engineering": "technical, prepared extensive demo, booked this 2 weeks ago",
+                "Your_Manager": "caught in the middle, trying to avoid political fallout",
+            },
+            "success_criteria": [
+                "Attend or delegate one meeting with a credible representative",
+                "Personally handle the higher-stakes meeting with preparation",
+            ],
         },
-        "success_criteria": [
-            "Reschedule one meeting without damaging the relationship",
-            "Attend or delegate the other meeting",
-        ],
-    },
-    # ── HARD  (3–4 conflicts each) ──────────────────────────────────────────
-    {
-        "id": "hard_01",
-        "title": "Travel Meltdown",
-        "difficulty": "hard",
-        "trigger": (
-            "Your flight has been cancelled. You have a 9am meeting tomorrow "
-            "in another city that you absolutely cannot miss. Your partner is "
-            "sitting alone at a restaurant waiting for you right now. Every "
-            "hotel near the meeting venue is sold out. Your boss doesn't know "
-            "you might miss the meeting."
-        ),
-        "conflicts": [
-            "cancelled_flight",
-            "partner_dinner",
-            "hotel_booking",
-            "boss_communication",
-        ],
-        "personas": {
-            "Partner_Jamie": "At the restaurant alone – upset, worried, texting you repeatedly.",
-            "Boss_Mark": "C-suite – expects you in person tomorrow morning, no excuses.",
-            "Airline_Agent": "Only alternative is a red-eye with a layover through Dallas.",
-            "Hotel_Concierge": "All hotels near the venue are fully booked for a conference.",
+    ],
+    "hard": [
+        {
+            "id": "hard_01",
+            "title": "Total Travel Meltdown",
+            "difficulty": "hard",
+            "trigger": (
+                "Your flight has been cancelled entirely — no rebooking available "
+                "until tomorrow afternoon. You have a 9am board meeting tomorrow "
+                "in another city that you are presenting at. Your partner is "
+                "sitting alone at a restaurant across town — you were supposed "
+                "to be there 40 minutes ago and they are furious. Every hotel "
+                "near the meeting venue is sold out. Your boss does not know "
+                "any of this yet."
+            ),
+            "conflicts": [
+                "flight_cancelled",
+                "partner_waiting",
+                "hotel_unavailable",
+                "boss_uninformed",
+            ],
+            "personas": {
+                "Partner_Jamie": "furious, has been texting for 40 minutes, considering leaving",
+                "Boss_Karen": "expects you in person tomorrow, will question your reliability",
+                "Airline_Agent": "overwhelmed, processing hundreds of cancellations",
+                "Hotel_Concierge": "apologetic but fully booked, might know alternatives",
+            },
+            "success_criteria": [
+                "Message partner immediately with honesty and a concrete plan",
+                "Inform boss with a backup plan (virtual presentation option)",
+                "Find alternative transportation (red-eye bus, rental car, train)",
+                "Secure accommodation near the meeting venue",
+            ],
         },
-        "success_criteria": [
-            "Secure alternative travel to the meeting city",
-            "Communicate with partner about the situation",
-            "Inform boss proactively with a backup plan",
-            "Find overnight accommodation",
-        ],
-    },
-    {
-        "id": "hard_02",
-        "title": "Team Crisis",
-        "difficulty": "hard",
-        "trigger": (
-            "Your key team member quit without notice this morning. A major "
-            "client deliverable is due at 5pm today – they were leading it. "
-            "Your own presentation to the CTO is in 2 hours. An intern who "
-            "started this week is stuck and needs guidance right now."
-        ),
-        "conflicts": [
-            "team_member_quit",
-            "client_deliverable",
-            "presentation_prep",
-        ],
-        "personas": {
-            "Client_Director": "Expecting deliverable by 5pm EOD – no extensions, contract depends on it.",
-            "Intern_Alex": "Overwhelmed – first week on the job, blocked on a critical task.",
-            "CTO": "Attending your presentation in 2 hours – high visibility, career-defining.",
-            "HR_Lead": "Needs to process the resignation paperwork and begin backfill.",
+        {
+            "id": "hard_02",
+            "title": "Team Collapse",
+            "difficulty": "hard",
+            "trigger": (
+                "Your key team member quit without notice this morning. A major "
+                "client deliverable is due at 5pm today — they were the lead on "
+                "it. You have your own board presentation to prepare for in 2 "
+                "hours. The intern who was shadowing the departing employee is "
+                "completely stuck and panicking. HR needs you to do an exit "
+                "interview."
+            ),
+            "conflicts": [
+                "team_member_quit",
+                "client_deliverable",
+                "presentation_prep",
+            ],
+            "personas": {
+                "Client_Director": "expecting delivery at 5pm sharp, contract depends on it",
+                "Intern_Alex": "panicking, has some context but not enough to finish alone",
+                "CTO": "concerned about team stability, wants a retention plan by EOD",
+                "HR_Lead": "needs exit paperwork completed, compliance deadline",
+            },
+            "success_criteria": [
+                "Take ownership of the client deliverable with a specific plan",
+                "Give the intern actionable guidance to contribute",
+                "Brief the CTO with a team continuity plan",
+            ],
         },
-        "success_criteria": [
-            "Redistribute the quitting member's work",
-            "Deliver or negotiate the client deliverable",
-            "Prepare adequately for the presentation",
-            "Provide minimal guidance to the intern",
-        ],
-    },
-    {
-        "id": "hard_03",
-        "title": "Budget Crisis",
-        "difficulty": "hard",
-        "trigger": (
-            "Budget cuts of 30% were just announced mid-project. Three client "
-            "contracts are now at risk of cancellation. Team morale has "
-            "collapsed – two senior engineers are openly discussing leaving. "
-            "You have a board presentation in 48 hours."
-        ),
-        "conflicts": [
-            "budget_cut",
-            "client_contracts",
-            "team_morale",
-        ],
-        "personas": {
-            "CFO": "Delivered the budget cut – open to creative proposals if you act fast.",
-            "Client_A": "Largest account – threatening to leave if project scope shrinks.",
-            "Client_B": "Mid-tier account – flexible but needs reassurance immediately.",
-            "Client_C": "New account – actively considering competitor proposals.",
-            "Team_Lead": "Demoralised – key engineers talking about quitting this week.",
+        {
+            "id": "hard_03",
+            "title": "Budget Crisis Firestorm",
+            "difficulty": "hard",
+            "trigger": (
+                "Budget cuts of 30% were just announced mid-project. Three "
+                "active client contracts are now at risk because you cannot "
+                "deliver the promised scope. Your team of 8 just heard the "
+                "news and morale has collapsed — two senior engineers are "
+                "updating their resumes. You have a board presentation in 48 "
+                "hours where you need to present a revised plan. A tech "
+                "journalist has somehow found out and is asking for comment."
+            ),
+            "conflicts": [
+                "budget_cuts",
+                "client_contracts_at_risk",
+                "team_morale_collapsed",
+                "press_inquiry",
+            ],
+            "personas": {
+                "CFO": "made the cut decision, open to hearing revised plans with ROI data",
+                "Client_A_Lead": "biggest account, will leave if scope is reduced without negotiation",
+                "Senior_Engineer_1": "top performer, has an offer from a competitor, on the fence",
+                "Journalist": "tech press, writing a story, deadline in 24 hours",
+                "Board_Chair": "needs confidence that leadership has a plan",
+            },
+            "success_criteria": [
+                "Negotiate with CFO using data-driven revised scope",
+                "Proactively contact at-risk clients with renegotiation options",
+                "Retain key engineers with concrete commitments",
+                "Manage press inquiry to control the narrative",
+            ],
         },
-        "success_criteria": [
-            "Propose a revised budget allocation to the CFO",
-            "Retain at least two of three client contracts",
-            "Stabilise team morale with a concrete action plan",
-            "Prepare a credible board presentation narrative",
-        ],
-    },
-]
+    ],
+}
 
-# Lookup helpers
-_SCENARIOS_BY_ID: dict[str, dict[str, Any]] = {s["id"]: s for s in SCENARIOS}
-_EASY = [s for s in SCENARIOS if s["difficulty"] == "easy"]
-_MEDIUM = [s for s in SCENARIOS if s["difficulty"] == "medium"]
-_HARD = [s for s in SCENARIOS if s["difficulty"] == "hard"]
-
-
-# ── Constants for reward functions ──────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════
+# REWARD CONSTANTS
+# ══════════════════════════════════════════════════════════════════════════
 
 ACTION_VERBS = [
     "reschedule", "inform", "contact", "book", "cancel", "delegate",
     "arrange", "call", "email", "message", "notify", "confirm", "move",
-    "propose",
+    "propose", "apologize", "explain", "update", "brief", "coordinate",
+    "negotiate", "offer", "send", "draft", "prepare", "escalate",
+    "rebook", "transfer", "assign", "prioritize", "defer",
 ]
 
-TIME_REFS = [
-    "minute", "hour", "today", "tomorrow", "morning", "evening",
-    "now", "immediately", "asap", "am", "pm",
+TIME_REFERENCES = [
+    "minute", "hour", "today", "tomorrow", "morning", "afternoon",
+    "evening", "tonight", "now", "immediately", "asap", "urgent",
+    "9am", "5pm", "am", "pm", "within", "deadline", "by",
+    "noon", "midnight", "eod", "eob", "before", "after",
 ]
 
 GENERIC_PHRASES = [
     "i will try my best",
     "i apologize for any inconvenience",
-    "i'll do my best",
-    "i'm sorry for the trouble",
+    "i ll do my best",
+    "i m sorry for the trouble",
     "as soon as possible",
     "i will get back to you",
+    "i understand your concern",
+    "i will look into this",
 ]
 
-VALID_URGENCIES = {"immediate", "within_hour", "today", "tomorrow"}
+VALID_URGENCY = ["immediate", "within_hour", "today", "tomorrow"]
+
+TIME_PRESSURE_BY_DIFFICULTY = {
+    "easy": "medium",
+    "medium": "high",
+    "hard": "critical",
+}
 
 
-# ── Environment ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════
+# ENVIRONMENT CLASS
+# ══════════════════════════════════════════════════════════════════════════
 
 
 class LifeOSEnvironment(Environment):
-    """OpenEnv RL environment that simulates life-management crises.
+    """OpenEnv-compliant RL environment for personal crisis management.
 
-    The agent must resolve interpersonal / logistical conflicts through
-    targeted communication actions.  Reward is decomposed into five
-    interpretable, independently computed components.
+    The agent observes a crisis scenario with active conflicts, persona
+    descriptions, and time pressure. It must respond with a structured
+    action: choosing an action type, targeting a specific person, crafting
+    actual message content, explaining its reasoning, and declaring urgency.
+
+    Reward is decomposed into 5 independent functions:
+      - conflict_addressed (0.30): does the action reference a real conflict?
+      - stakeholder_reached (0.25): is the target a real persona?
+      - action_specificity (0.20): does content have verbs + time references?
+      - format_compliance (0.15): is reasoning substantive + urgency valid?
+      - no_escalation (0.10): are generic filler phrases absent?
+
+    Curriculum learning progresses: easy (ep 1-8) → medium (9-16) → hard (17+).
     """
-
-    SUPPORTS_CONCURRENT_SESSIONS: bool = True
-
-    # ── lifecycle ───────────────────────────────────────────────────────
 
     def __init__(self) -> None:
         super().__init__()
+        self._scenario: dict[str, Any] = {}
+        self._step_count: int = 0
+        self._max_steps: int = 10
+        self._done: bool = False
+        self._cumulative_reward: float = 0.0
+        self._reward_history: list[float] = []
+        self._prev_content: str = ""
+        self._last_breakdown: dict[str, float] = {}
+        self._episode_count: int = 0
+
         # Curriculum tracking
-        self._curriculum: dict[str, Any] = {
+        self._curriculum = {
             "easy_done": 0,
             "medium_done": 0,
             "stage": "easy",
         }
 
-        # Per-episode state
-        self._scenario: dict[str, Any] = {}
-        self._active_conflicts: list[str] = []
-        self._persona_responses: dict[str, str] = {}
-        self._prev_content: str = ""
-        self._state = LifeOSState(scenario_id="", difficulty="easy")
+    # ──────────────────────────────────────────────────────────────────
+    # CURRICULUM LOGIC
+    # ──────────────────────────────────────────────────────────────────
 
-    # ── reset ───────────────────────────────────────────────────────────
-
-    def reset(
-        self,
-        seed: Optional[int] = None,
-        episode_id: Optional[str] = None,
-        **kwargs: Any,
-    ) -> LifeOSObservation:
-        """Pick a scenario based on curriculum stage and return the first observation."""
-        self._reset_rubric()
-
-        # Advance curriculum
-        if self._curriculum["easy_done"] < 8:
-            self._curriculum["stage"] = "easy"
-            self._curriculum["easy_done"] += 1
-        elif self._curriculum["medium_done"] < 8:
-            self._curriculum["stage"] = "medium"
-            self._curriculum["medium_done"] += 1
+    def _get_curriculum_stage(self) -> str:
+        """Determine difficulty tier based on episode count."""
+        if self._episode_count < 8:
+            return "easy"
+        elif self._episode_count < 16:
+            return "medium"
         else:
-            self._curriculum["stage"] = "hard"
+            return "hard"
 
-        # Pick scenario from current stage
-        pool = {
-            "easy": _EASY,
-            "medium": _MEDIUM,
-            "hard": _HARD,
-        }
-        candidates = pool.get(self._curriculum["stage"], _EASY)
-        rng = random.Random(seed)
-        scenario = rng.choice(candidates)
+    def _pick_scenario(self, seed: int | None = None) -> dict[str, Any]:
+        """Pick a scenario from the current curriculum stage."""
+        stage = self._get_curriculum_stage()
+        self._curriculum["stage"] = stage
+        pool = SCENARIOS[stage]
 
-        self._scenario = scenario
-        self._active_conflicts = list(scenario["conflicts"])
-        self._persona_responses = {
-            name: "Awaiting your action."
-            for name in scenario["personas"]
-        }
+        if seed is not None:
+            rng = random.Random(seed)
+        else:
+            rng = random.Random()
+
+        return rng.choice(pool)
+
+    # ──────────────────────────────────────────────────────────────────
+    # RESET
+    # ──────────────────────────────────────────────────────────────────
+
+    def reset(self, seed: int | None = None) -> LifeOSObservation:
+        """Reset the environment with a new crisis scenario.
+
+        Args:
+            seed: Optional random seed for reproducible scenario selection.
+
+        Returns:
+            Initial observation with scenario description and active conflicts.
+        """
+        self._episode_count += 1
+        self._scenario = self._pick_scenario(seed)
+        self._step_count = 0
+        self._done = False
+        self._cumulative_reward = 0.0
+        self._reward_history = []
         self._prev_content = ""
-
-        self._state = LifeOSState(
-            scenario_id=scenario["id"],
-            difficulty=scenario["difficulty"],
-            step_count=0,
-            max_steps=10,
-            conflicts_total=len(scenario["conflicts"]),
-            conflicts_resolved=0,
-            done=False,
-            cumulative_reward=0.0,
-            reward_history=[],
-        )
-
-        return self._build_observation(reward_breakdown={})
-
-    # ── step ────────────────────────────────────────────────────────────
-
-    def step(
-        self,
-        action: LifeOSAction,  # type: ignore[override]
-        timeout_s: Optional[float] = None,
-        **kwargs: Any,
-    ) -> tuple[LifeOSObservation, float, bool]:
-        """Execute one agent action, compute decomposed reward, advance state."""
-        self._state.step_count += 1
-
-        # ── Anti-hacking: duplicate content ─────────────────────────────
-        if action.content.strip() == self._prev_content.strip() and self._prev_content != "":
-            reward_breakdown = {
-                "conflict_addressed": 0.0,
-                "stakeholder_reached": 0.0,
-                "action_specificity": 0.0,
-                "format_compliance": 0.0,
-                "no_escalation": 0.0,
-            }
-            total_reward = 0.0
-            self._prev_content = action.content
-            self._state.reward_history.append(total_reward)
-            done = self._state.step_count >= self._state.max_steps
-            self._state.done = done
-            return self._build_observation(reward_breakdown), total_reward, done
-
-        # ── Anti-hacking: too short ─────────────────────────────────────
-        if len(action.content) < 30:
-            reward_breakdown = {
-                "conflict_addressed": 0.0,
-                "stakeholder_reached": 0.0,
-                "action_specificity": 0.0,
-                "format_compliance": 0.0,
-                "no_escalation": 0.0,
-            }
-            total_reward = 0.0
-            self._prev_content = action.content
-            self._state.reward_history.append(total_reward)
-            done = self._state.step_count >= self._state.max_steps
-            self._state.done = done
-            return self._build_observation(reward_breakdown), total_reward, done
-
-        # ── Compute five independent reward components ──────────────────
-        reward_breakdown = {
-            "conflict_addressed": self._reward_conflict_addressed(action, self._scenario),
-            "stakeholder_reached": self._reward_stakeholder_reached(action, self._scenario),
-            "action_specificity": self._reward_action_specificity(action),
-            "format_compliance": self._reward_format_compliance(action),
-            "no_escalation": self._reward_no_escalation(action),
+        self._last_breakdown = {
+            "conflict_addressed": 0.0,
+            "stakeholder_reached": 0.0,
+            "action_specificity": 0.0,
+            "format_compliance": 0.0,
+            "no_escalation": 0.0,
         }
-        total_reward = min(sum(reward_breakdown.values()), 1.0)
 
-        # Store for duplicate detection
-        self._prev_content = action.content
-
-        # Update resolved conflicts
-        self._update_resolved_conflicts(action)
-
-        # Simulate persona responses
-        self._simulate_persona_responses(action)
-
-        # Accumulate reward
-        self._state.cumulative_reward += total_reward
-        self._state.reward_history.append(total_reward)
-
-        # Termination
-        done = (
-            self._state.step_count >= self._state.max_steps
-            or self._state.conflicts_resolved >= self._state.conflicts_total
+        # Build the full scenario description
+        persona_descriptions = "; ".join(
+            f"{name} ({desc})"
+            for name, desc in self._scenario["personas"].items()
         )
-        self._state.done = done
+        description = (
+            f"{self._scenario['trigger']}\n\n"
+            f"People involved: {persona_descriptions}\n\n"
+            f"Active conflicts: {', '.join(self._scenario['conflicts'])}\n\n"
+            f"Success criteria: {'; '.join(self._scenario['success_criteria'])}"
+        )
 
-        observation = self._build_observation(reward_breakdown)
-        return observation, total_reward, done
+        # Initial persona responses
+        initial_responses = {
+            name: "Waiting for your response..."
+            for name in self._scenario["personas"]
+        }
 
-    # ── state property ──────────────────────────────────────────────────
+        difficulty = self._scenario["difficulty"]
 
-    @property
-    def state(self) -> LifeOSState:
-        """Return a copy of the current environment state."""
-        return self._state.model_copy()
+        return LifeOSObservation(
+            scenario_description=description,
+            active_conflicts=list(self._scenario["conflicts"]),
+            persona_responses=initial_responses,
+            time_pressure=TIME_PRESSURE_BY_DIFFICULTY.get(difficulty, "medium"),
+            step_number=0,
+            reward_breakdown=dict(self._last_breakdown),
+            reward=None,
+            done=False,
+        )
 
-    # ── Five independent reward functions ────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
+    # FIVE INDEPENDENT REWARD FUNCTIONS
+    # ──────────────────────────────────────────────────────────────────
 
     def _reward_conflict_addressed(
         self, action: LifeOSAction, scenario: dict[str, Any]
     ) -> float:
-        """0–0.30: Does the action content reference an active conflict keyword?"""
+        """Check if the action references an actual active conflict.
+
+        Extracts keywords from conflict names (e.g. 'flight_cancelled' →
+        ['flight', 'cancelled']) and checks if any appear in the content.
+
+        Returns:
+            0.30 if a conflict keyword is found in content.
+            0.05 if content is substantive (>30 chars) but no keyword match.
+            0.00 otherwise.
+        """
         content_lower = action.content.lower()
-        for conflict in self._active_conflicts:
+        for conflict in scenario["conflicts"]:
             keywords = conflict.replace("_", " ").split()
-            if any(kw in content_lower for kw in keywords):
-                return 0.30
+            for keyword in keywords:
+                if len(keyword) > 2 and keyword in content_lower:
+                    return 0.30
         # Partial credit for substantive content
-        if len(action.content) > 30:
+        if len(action.content.strip()) > 30:
             return 0.05
         return 0.0
 
     def _reward_stakeholder_reached(
         self, action: LifeOSAction, scenario: dict[str, Any]
     ) -> float:
-        """0–0.25: Is the target person one of the scenario's personas?"""
-        if action.target_person in scenario.get("personas", {}):
-            return 0.25
-        # Partial credit for non-empty target
-        if action.target_person.strip():
+        """Check if the action targets a real persona in the scenario.
+
+        Returns:
+            0.25 if target_person matches a persona name (case-insensitive).
+            0.05 if target_person is non-empty but doesn't match.
+            0.00 if target_person is empty.
+        """
+        target_lower = action.target_person.lower().strip()
+        if not target_lower:
+            return 0.0
+        for persona_name in scenario["personas"]:
+            if persona_name.lower() in target_lower or target_lower in persona_name.lower():
+                return 0.25
+        # Partial credit for having any target
+        if target_lower:
             return 0.05
         return 0.0
 
     def _reward_action_specificity(self, action: LifeOSAction) -> float:
-        """0–0.20: Content contains both a time reference AND an action verb."""
+        """Check if the content contains specific action verbs and time references.
+
+        Returns:
+            0.20 if both an action verb and a time reference are present.
+            0.10 if only one is present.
+            0.00 if neither is present.
+        """
         content_lower = action.content.lower()
         has_verb = any(verb in content_lower for verb in ACTION_VERBS)
-        has_time = any(ref in content_lower for ref in TIME_REFS)
+        has_time = any(time_ref in content_lower for time_ref in TIME_REFERENCES)
+
         if has_verb and has_time:
             return 0.20
-        if has_verb or has_time:
+        elif has_verb or has_time:
             return 0.10
         return 0.0
 
     def _reward_format_compliance(self, action: LifeOSAction) -> float:
-        """0–0.15: Reasoning is substantive (>40 chars) and urgency is valid."""
-        reasoning_ok = len(action.reasoning) > 40
-        urgency_ok = action.urgency in VALID_URGENCIES
-        if reasoning_ok and urgency_ok:
+        """Check if reasoning is substantive and urgency is valid.
+
+        Returns:
+            0.15 if reasoning > 40 chars AND urgency is valid.
+            0.07 if only one condition is met.
+            0.00 if neither is met.
+        """
+        good_reasoning = len(action.reasoning.strip()) > 40
+        good_urgency = action.urgency in VALID_URGENCY
+
+        if good_reasoning and good_urgency:
             return 0.15
-        if reasoning_ok or urgency_ok:
+        elif good_reasoning or good_urgency:
             return 0.07
         return 0.0
 
     def _reward_no_escalation(self, action: LifeOSAction) -> float:
-        """0–0.10: Penalise generic filler phrases."""
+        """Penalize generic filler phrases that LLMs default to.
+
+        Returns:
+            0.10 if no generic phrases are found.
+            0.00 if any generic phrase is detected.
+        """
         content_lower = action.content.lower()
         for phrase in GENERIC_PHRASES:
             if phrase in content_lower:
                 return 0.0
         return 0.10
 
-    # ── helpers ──────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────
+    # STEP
+    # ──────────────────────────────────────────────────────────────────
 
-    def _update_resolved_conflicts(self, action: LifeOSAction) -> None:
-        """Mark a conflict as resolved if the action addresses it directly."""
-        content_lower = action.content.lower()
-        newly_resolved: list[str] = []
-        for conflict in self._active_conflicts:
-            keywords = conflict.replace("_", " ").split()
-            if any(kw in content_lower for kw in keywords):
-                newly_resolved.append(conflict)
+    def step(
+        self, action: LifeOSAction, **kwargs: Any,
+    ) -> LifeOSObservation:
+        """Execute an action and return observation with reward and done.
 
-        for conflict in newly_resolved:
-            self._active_conflicts.remove(conflict)
-            self._state.conflicts_resolved += 1
+        Applies anti-reward-hacking guards first, then computes all 5
+        reward components independently.
 
-    def _simulate_persona_responses(self, action: LifeOSAction) -> None:
-        """Generate simple deterministic persona responses based on the action."""
-        target = action.target_person
-        personas = self._scenario.get("personas", {})
+        Args:
+            action: The agent's structured action.
 
-        if target in personas:
-            self._persona_responses[target] = (
-                f"Acknowledged your {action.action_type}. "
-                f"I'll factor this into my plans."
-            )
-        else:
-            for name in personas:
-                if (
-                    name not in self._persona_responses
-                    or self._persona_responses[name] == "Awaiting your action."
-                ):
-                    self._persona_responses[name] = "Still waiting for your response."
+        Returns:
+            LifeOSObservation with reward and done fields set.
+        """
+        # Auto-reset if no scenario loaded (HTTP mode creates fresh env per request)
+        if not self._scenario:
+            self.reset()
+
+        self._step_count += 1
+        done = self._step_count >= self._max_steps
+        self._done = done
+        scenario = self._scenario
+        difficulty = scenario.get("difficulty", "easy")
+
+        # ── Anti-reward-hacking guard: duplicate content ──
+        if (
+            self._prev_content
+            and action.content.strip() == self._prev_content.strip()
+        ):
+            zero_breakdown = {k: 0.0 for k in self._last_breakdown}
+            self._last_breakdown = zero_breakdown
+            self._reward_history.append(0.0)
+            return self._build_observation(scenario, zero_breakdown, difficulty, 0.0, done)
+
+        # ── Anti-reward-hacking guard: minimum content length ──
+        if len(action.content.strip()) < 30:
+            zero_breakdown = {k: 0.0 for k in self._last_breakdown}
+            self._last_breakdown = zero_breakdown
+            self._reward_history.append(0.0)
+            return self._build_observation(scenario, zero_breakdown, difficulty, 0.0, done)
+
+        # ── Compute all 5 reward components independently ──
+        breakdown = {
+            "conflict_addressed": self._reward_conflict_addressed(action, scenario),
+            "stakeholder_reached": self._reward_stakeholder_reached(action, scenario),
+            "action_specificity": self._reward_action_specificity(action),
+            "format_compliance": self._reward_format_compliance(action),
+            "no_escalation": self._reward_no_escalation(action),
+        }
+
+        total_reward = min(sum(breakdown.values()), 1.0)
+
+        # ── Update state ──
+        self._prev_content = action.content
+        self._last_breakdown = breakdown
+        self._cumulative_reward += total_reward
+        self._reward_history.append(total_reward)
+
+        return self._build_observation(scenario, breakdown, difficulty, total_reward, done)
+
+    # ──────────────────────────────────────────────────────────────────
+    # HELPERS
+    # ──────────────────────────────────────────────────────────────────
 
     def _build_observation(
         self,
-        reward_breakdown: dict[str, float],
+        scenario: dict[str, Any],
+        breakdown: dict[str, float],
+        difficulty: str,
+        reward_value: float = 0.0,
+        is_done: bool = False,
     ) -> LifeOSObservation:
-        """Construct an observation from the current environment state."""
-        scenario = self._scenario
-        time_pressure = self._infer_time_pressure()
+        """Build an observation from current state."""
+        # Generate contextual persona responses based on step
+        responses = {}
+        for name, personality in scenario.get("personas", {}).items():
+            if self._step_count <= 1:
+                responses[name] = "Waiting for your response..."
+            elif sum(breakdown.values()) > 0.5:
+                responses[name] = f"{name} acknowledges your message positively."
+            else:
+                responses[name] = f"{name} is still waiting for a substantive response."
 
         return LifeOSObservation(
             scenario_description=scenario.get("trigger", ""),
-            active_conflicts=list(self._active_conflicts),
-            persona_responses=dict(self._persona_responses),
-            time_pressure=time_pressure,
-            step_number=self._state.step_count,
-            reward_breakdown=reward_breakdown,
+            active_conflicts=list(scenario.get("conflicts", [])),
+            persona_responses=responses,
+            time_pressure=TIME_PRESSURE_BY_DIFFICULTY.get(difficulty, "medium"),
+            step_number=self._step_count,
+            reward_breakdown=dict(breakdown),
+            reward=reward_value,
+            done=is_done,
         )
 
-    def _infer_time_pressure(self) -> str:
-        """Derive a human-readable time-pressure label from the state."""
-        remaining = self._state.max_steps - self._state.step_count
-        if remaining <= 2:
-            return "critical – almost out of steps"
-        if remaining <= 5:
-            return "high – limited steps remaining"
-        return "moderate – enough steps to plan carefully"
+    @property
+    def state(self) -> LifeOSState:
+        """Return the current internal environment state."""
+        return LifeOSState(
+            scenario_id=self._scenario.get("id", "none"),
+            difficulty=self._scenario.get("difficulty", "easy"),
+            step_count=self._step_count,
+            max_steps=self._max_steps,
+            conflicts_total=len(self._scenario.get("conflicts", [])),
+            conflicts_resolved=0,
+            done=self._done,
+            cumulative_reward=self._cumulative_reward,
+            reward_history=list(self._reward_history),
+        )
