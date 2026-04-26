@@ -23,5 +23,9 @@ COPY server/ ./server/
 # HuggingFace Spaces requires port 7860
 EXPOSE 7860
 
+# Env vars for running Gradio inside Docker
+ENV GRADIO_SERVER_NAME="0.0.0.0"
+ENV GRADIO_SERVER_PORT="7860"
+
 # Run the Gradio UI
 CMD ["python", "app_ui.py"]
